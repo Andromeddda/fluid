@@ -1,0 +1,16 @@
+cmake_minimum_required(VERSION 3.23)
+
+project(fluid LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDART 20)
+set(CMAKE_CXX_STANDARD_REQUIRED on)
+
+set(CMAKE_CXX_FLAGS_DEBUG "-Werror -Wall -std=gnu++20 -Wextra -fsanitize=undefined,address,float-divide-by-zero,float-cast-overflow -g3 -O0")
+set(CMAKE_CXX_FLAGS_RELEASE "-Werror -Wall -Wextra -std=gnu++20 -g0 -O2")
+
+set(SOURCES
+    src/fluid.cpp)
+
+add_executable(${CMAKE_PROJECT_NAME} ${SOURCES})
+
+target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE src)
