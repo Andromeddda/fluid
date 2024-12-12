@@ -13,8 +13,6 @@
 
 namespace fluid
 {
-    constexpr size_t T = 1'000'000;
-
     template <typename Type, size_t N, size_t M>
     struct VectorField 
     {
@@ -37,7 +35,6 @@ namespace fluid
         assert(i < deltas.size());
         return v[x][y][i];
     }
-
 
 } // namespace fluid
 
