@@ -1,6 +1,11 @@
 #ifndef HEADER_GUARD_SIMULATION_SIMULATION_HPP
 #define HEADER_GUARD_SIMULATION_SIMULATION_HPP
 
+#include <cstdio>
+#include <string>
+#include <cstring>
+#include <ostream>
+
 namespace fluid
 {
     template <typename P_Type, typename V_Type, typename VF_Type, size_t N, size_t M>
@@ -10,7 +15,7 @@ namespace fluid
     public:
         Simulation(char **field) : field_(field) {}
 
-        void run();
+        void run(std::ostream& os);
     };
 
 } // namespace fluid
