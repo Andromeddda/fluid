@@ -6,6 +6,7 @@
 #include <cstring>
 #include <ostream>
 #include <assert.h>
+#include <memory>
 #include <bits/stdc++.h>
 
 #include "vector_field.hpp"
@@ -15,6 +16,7 @@ namespace fluid
 {
     constexpr size_t T = 1'000'000;
 
+
     template <typename P, typename V, typename VF, size_t N, size_t M>
     class Simulation
     {
@@ -23,10 +25,9 @@ namespace fluid
     public:
         Simulation(char field[][M + 1]);
 
+        void run(std::ostream& os);
         void set_g(P g);
         void set_rho(char c, P rho);
-
-        void run(std::ostream& os);
 
     private:
         friend class ParticleParams<P, V>;
@@ -47,11 +48,11 @@ namespace fluid
 
         std::mt19937 rnd{1337};
 
-        Fixed   move_prob(int x, int y);
+        V   move_prob(int x, int y);
         bool    propagate_move(int x, int y, bool is_first);
         void    propagate_stop(int x, int y, bool force = false);
-        std::tuple<Fixed, bool, std::pair<int, int>> propagate_flow(int x, int y, Fixed lim);
-        Fixed random01();
+        std::tuple<V, bool, std::pair<int, int>> propagate_flow(int x, int y, V lim);
+        V random01();
 
     }; // class Simulation
 
@@ -74,7 +75,6 @@ namespace fluid
         rho_[(size_t)c] = rho;
     }
 
-
     template <typename P, typename V, typename VF, size_t N, size_t M>
     void Simulation<P, V, VF, N, M>::run(std::ostream& os)
     {
@@ -89,7 +89,7 @@ namespace fluid
 
         for (size_t i = 0; i < T; ++i) 
         {    
-            Fixed total_delta_p = 0;
+            P total_delta_p = 0;
             // Apply external forces
             for (size_t x = 0; x < N; ++x) {
                 for (size_t y = 0; y < M; ++y) {
@@ -158,14 +158,14 @@ namespace fluid
                         continue;
                     for (auto [dx, dy] : deltas) 
                     {
-                        auto old_v = velocity_.get(x, y, dx, dy);
-                        auto new_v = velocity_flow_.get(x, y, dx, dy);
+                        V old_v = velocity_.get(x, y, dx, dy);
+                        V new_v = velocity_flow_.get(x, y, dx, dy);
 
                         if (old_v > 0) 
                         {
                             assert(new_v <= old_v);
                             velocity_.get(x, y, dx, dy) = new_v;
-                            auto force = (old_v - new_v) * rho_[(int) field_[x][y]];
+                            V force = (old_v - new_v) * rho_[(int) field_[x][y]];
 
                             if (field_[x][y] == '.')
                                 force *= 0.8;
@@ -218,27 +218,27 @@ namespace fluid
     } // Simulation::run
 
     template <typename P, typename V, typename VF, size_t N, size_t M>
-    Fixed Simulation<P, V, VF, N, M>::random01() 
+    V Simulation<P, V, VF, N, M>::random01() 
     {
-        return Fixed::from_raw((rnd() & ((1 << 16) - 1)));
+        return V::from_raw((rnd() & ((1 << 16) - 1)));
     }
 
     template <typename P, typename V, typename VF, size_t N, size_t M>
-    std::tuple<Fixed, bool, std::pair<int, int>> Simulation<P, V, VF, N, M>::propagate_flow(int x, int y, Fixed lim) 
+    std::tuple<V, bool, std::pair<int, int>> Simulation<P, V, VF, N, M>::propagate_flow(int x, int y, V lim) 
     {
         last_use_[x][y] = UT - 1;
-        Fixed ret = 0;
+        V ret = 0;
         for (auto [dx, dy] : deltas) 
         {
             int nx = x + dx, ny = y + dy;
             if (field_[nx][ny] != '#' && last_use_[nx][ny] < UT) 
             {
-                auto cap = velocity_.get(x, y, dx, dy);
-                auto flow = velocity_flow_.get(x, y, dx, dy);
+                V cap = velocity_.get(x, y, dx, dy);
+                V flow = velocity_flow_.get(x, y, dx, dy);
                 if (flow == cap)
                     continue;
 
-                auto vp = std::min(lim, cap - flow);
+                V vp = std::min(lim, cap - flow);
                 if (last_use_[nx][ny] == UT - 1) 
                 {
                     velocity_flow_.add(x, y, dx, dy, vp);
@@ -269,8 +269,8 @@ namespace fluid
         int nx = -1, ny = -1;
         do 
         {
-            std::array<Fixed, deltas.size()> tres;
-            Fixed sum = 0;
+            std::array<V, deltas.size()> tres;
+            V sum = 0;
             for (size_t i = 0; i < deltas.size(); ++i) 
             {
                 auto [dx, dy] = deltas[i];
@@ -281,7 +281,7 @@ namespace fluid
                     tres[i] = sum;
                     continue;
                 }
-                auto v = velocity_.get(x, y, dx, dy);
+                V v = velocity_.get(x, y, dx, dy);
                 if (v < 0) 
                 {
                     tres[i] = sum;
@@ -294,8 +294,8 @@ namespace fluid
             if (sum == 0)
                 break;
 
-            Fixed p_ = random01() * sum;
-            size_t d = std::ranges::upper_bound(tres, p_) - tres.begin();
+            V p = random01() * sum;
+            size_t d = std::ranges::upper_bound(tres, p) - tres.begin();
 
             auto [dx, dy] = deltas[d];
             nx = x + dx;
@@ -331,33 +331,42 @@ namespace fluid
     template <typename P, typename V, typename VF, size_t N, size_t M>
     void Simulation<P, V, VF, N, M>::propagate_stop(int x, int y, bool force) 
     {
-        if (!force) {
+        if (!force) 
+        {
             bool stop = true;
-            for (auto [dx, dy] : deltas) {
+            for (auto [dx, dy] : deltas) 
+            {
                 int nx = x + dx, ny = y + dy;
                 if (field_[nx][ny] != '#' && last_use_[nx][ny] < UT - 1 && velocity_.get(x, y, dx, dy) > 0) {
                     stop = false;
                     break;
                 }
             }
-            if (!stop) {
+            if (!stop) 
                 return;
-            }
         }
         last_use_[x][y] = UT;
-        for (auto [dx, dy] : deltas) {
+        for (auto [dx, dy] : deltas) 
+        {
             int nx = x + dx, ny = y + dy;
-            if (field_[nx][ny] == '#' || last_use_[nx][ny] == UT || velocity_.get(x, y, dx, dy) > 0) {
+
+            if (field_[nx][ny] == '#')
                 continue;
-            }
+
+            if (last_use_[nx][ny] == UT)
+                continue;
+
+            if (velocity_.get(x, y, dx, dy) > 0)
+                continue;
+
             propagate_stop(nx, ny);
         }
     } // Simulation::propagate_stop
 
     template <typename P, typename V, typename VF, size_t N, size_t M>
-    Fixed Simulation<P, V, VF, N, M>::move_prob(int x, int y) 
+    V Simulation<P, V, VF, N, M>::move_prob(int x, int y) 
     {
-        Fixed sum = 0;
+        V sum = 0;
         for (size_t i = 0; i < deltas.size(); ++i) {
             auto [dx, dy] = deltas[i];
             int nx = x + dx, ny = y + dy;
