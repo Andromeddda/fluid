@@ -10,7 +10,7 @@ set(CMAKE_CXX_FLAGS_RELEASE "-Werror -Wall -Wextra -std=gnu++20 -g0 -O2")
 
 set(SOURCES
     src/main.cpp
-    src/fixed/fixed.cpp)
+        )
 
 add_executable(${CMAKE_PROJECT_NAME} ${SOURCES})
 

@@ -48,11 +48,11 @@ namespace fluid
 
         std::mt19937 rnd{1337};
 
-        V   move_prob(int x, int y);
+        V       move_prob(int x, int y);
         bool    propagate_move(int x, int y, bool is_first);
         void    propagate_stop(int x, int y, bool force = false);
         std::tuple<V, bool, std::pair<int, int>> propagate_flow(int x, int y, V lim);
-        V random01();
+        V       random01();
 
     }; // class Simulation
 
@@ -227,18 +227,18 @@ namespace fluid
     std::tuple<V, bool, std::pair<int, int>> Simulation<P, V, VF, N, M>::propagate_flow(int x, int y, V lim) 
     {
         last_use_[x][y] = UT - 1;
-        V ret = 0;
+        VF ret = 0;
         for (auto [dx, dy] : deltas) 
         {
             int nx = x + dx, ny = y + dy;
             if (field_[nx][ny] != '#' && last_use_[nx][ny] < UT) 
             {
                 V cap = velocity_.get(x, y, dx, dy);
-                V flow = velocity_flow_.get(x, y, dx, dy);
+                VF flow = velocity_flow_.get(x, y, dx, dy);
                 if (flow == cap)
                     continue;
 
-                V vp = std::min(lim, cap - flow);
+                VF vp = std::min(lim, cap - flow);
                 if (last_use_[nx][ny] == UT - 1) 
                 {
                     velocity_flow_.add(x, y, dx, dy, vp);
