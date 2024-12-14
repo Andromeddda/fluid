@@ -3,6 +3,7 @@
 #include "fixed.hpp"
 #include "vector_field.hpp"
 #include "simulation.hpp"
+#include "simulation_processing.hpp"
 
 using namespace fluid;
 using namespace std;

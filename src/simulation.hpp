@@ -18,6 +18,13 @@ namespace fluid
 {
     constexpr size_t T = 1'000'000;
 
+    class AbstractSimulation
+    {
+    public:
+        AbstractSimulation() {};
+        virtual ~AbstractSimulation() = 0;
+    };
+
     // SizeArgs... can either be 0 or 2 parameters
     // Otherwise MatrixType will throw compile error
 
@@ -26,10 +33,10 @@ namespace fluid
     //      (in this case passing N and M to constructor will do nothing)
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
-    class Simulation
+    class Simulation : public AbstractSimulation
     {
-        MatrixType<char, SizeArgs...>::type field_;
     public:
+        Simulation();
         Simulation(size_t n, size_t m);
         void run(std::ostream& os);
 
@@ -37,6 +44,7 @@ namespace fluid
         friend class ParticleParams<P, V>;
 
         size_t N, M;
+        MatrixType<char, SizeArgs...>::type field_;
 
         P   g_;
         P   rho_[256];
@@ -62,9 +70,18 @@ namespace fluid
 
     }; // class Simulation
 
+
+    template <typename P, typename V, typename VF, size_t... SizeArgs>
+    Simulation<P, V, VF, SizeArgs...>::Simulation()
+    : 
+        N(GetSizes<SizeArgs...>::n), M(GetSizes<SizeArgs...>::m),
+        field_(N, M), p_(N, M), old_p_(N, M), last_use_(N, M), dirs_(N, M), velocity_(N, M), velocity_flow_(N, M)
+    { }
+
+
     template <typename P, typename V, typename VF, size_t... SizeArgs>
     Simulation<P, V, VF, SizeArgs...>::Simulation(size_t n, size_t m)
-    : field_(n, m), p_(n, m), old_p_(n, m), last_use_(n, m), dirs_(m, m), velocity_(n, m), velocity_flow_(n, m)
+    : N(n), M(m), field_(n, m), p_(n, m), old_p_(n, m), last_use_(n, m), dirs_(n, m), velocity_(n, m), velocity_flow_(n, m)
     {
         assert(SizesMatch<SizeArgs...>(n, m));
     }

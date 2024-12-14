@@ -14,8 +14,6 @@ namespace fluid
     template <typename T, size_t N, size_t M>
     struct MatrixType<T, N, M>  { using type = StaticMatrix<T, N, M>; };
 
-
-
     // check if two size_t variables match the template arguments
     template <size_t ...SizeArgs>
     struct SizesMatch;
@@ -37,6 +35,26 @@ namespace fluid
 
         operator bool() const { return (n == N) && (m == M); }
     };
+
+    // Get sizes
+
+    template <size_t ...SizeArgs>
+    struct GetSizes;
+
+    template <>
+    struct GetSizes<>
+    {
+        static const size_t n = 1, m = 1;
+    };
+
+    template <size_t N, size_t M>
+    struct GetSizes<N, M>
+    {
+        static const size_t n = N, m = M;
+    };
+
+
+
 
 } // namespace fluid
 
