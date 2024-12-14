@@ -12,6 +12,20 @@ set(SOURCES
     src/main.cpp
         )
 
+if (DEFINED TYPES)
+    add_compile_definitions("TYPES=${TYPES}")
+else()
+    message(FATAL_ERROR "TYPES compile option is required")
+endif()
+
+
+if (DEFINED SIZES)
+    add_compile_definitions("SIZES=${SIZES}")
+else()
+    message(FATAL_ERROR "SIZES compile option is required")
+endif()
+
+
 add_executable(${CMAKE_PROJECT_NAME} ${SOURCES})
 
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE src)

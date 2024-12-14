@@ -11,23 +11,30 @@
 
 #include "vector_field.hpp"
 #include "particle_params.hpp"
+#include "type_processing.hpp"
+#include "matrix.hpp"
 
 namespace fluid
 {
     constexpr size_t T = 1'000'000;
 
+    template <typename T, size_t ... Args>
+    struct MatrixType;
 
-    template <typename P, typename V, typename VF, size_t N, size_t M>
+    template <typename T>
+    struct MatrixType<T>        { using type = DynamicMatrix<T>; };
+
+    template <typename T, size_t N, size_t M>
+    struct MatrixType<T, N, M>  { using type = StaticMatrix<T, N, M>; };
+
+
+    template <typename P, typename V, typename VF, size_t... SizeArgs>
     class Simulation
     {
-        char field_[N][M + 1];
+        MatrixType<char, SizeArgs...>::type field_;
 
     public:
-        Simulation(char field[][M + 1]);
-
         void run(std::ostream& os);
-        void set_g(P g);
-        void set_rho(char c, P rho);
 
     private:
         friend class ParticleParams<P, V>;
@@ -35,14 +42,14 @@ namespace fluid
         P   g_;
         P   rho_[256];
 
-        P   p_[N][M]; 
-        P   old_p_[N][M];
+        MatrixType<P, SizeArgs...>::type   p_; 
+        MatrixType<P, SizeArgs...>::type   old_p_;
+
+        MatrixType<int, SizeArgs...>::type last_use_;
+        MatrixType<int, SizeArgs...>::type dirs_;
 
         VectorField<V, N, M>   velocity_;
         VectorField<VF, N, M>  velocity_flow_;
-
-        int last_use_[N][M];
-        int dirs_[N][M];
 
         int UT = 0;
 
@@ -56,27 +63,8 @@ namespace fluid
 
     }; // class Simulation
 
-    template <typename P, typename V, typename VF, size_t N, size_t M>
-    Simulation<P, V, VF, N, M>::Simulation(char field[][M + 1])
-    {
-        for (size_t i = 0; i < N; i++)
-            memcpy(field_[i], field[i], M + 1);
-    }
-
-    template <typename P, typename V, typename VF, size_t N, size_t M>
-    void Simulation<P, V, VF, N, M>::set_g(P g)
-    {
-        g_ = g;
-    }
-
-    template <typename P, typename V, typename VF, size_t N, size_t M>
-    void Simulation<P, V, VF, N, M>::set_rho(char c, P rho)
-    {
-        rho_[(size_t)c] = rho;
-    }
-
-    template <typename P, typename V, typename VF, size_t N, size_t M>
-    void Simulation<P, V, VF, N, M>::run(std::ostream& os)
+    template <typename P, typename V, typename VF, size_t... SizeArgs>
+    void Simulation<P, V, VF, SizeArgs...>::run(std::ostream& os)
     {
         for (size_t x = 0; x < N; ++x) 
             for (size_t y = 0; y < M; ++y) 
@@ -101,7 +89,8 @@ namespace fluid
             }
 
             // Apply forces from p_
-            memcpy(old_p_, p_, sizeof(p_));
+            // memcpy(old_p_, p_, sizeof(p_));
+            old_p_ = p;
             for (size_t x = 0; x < N; ++x) 
                 for (size_t y = 0; y < M; ++y) 
                 {
@@ -217,14 +206,14 @@ namespace fluid
         }
     } // Simulation::run
 
-    template <typename P, typename V, typename VF, size_t N, size_t M>
-    V Simulation<P, V, VF, N, M>::random01() 
+    template <typename P, typename V, typename VF, size_t... SizeArgs>
+    V Simulation<P, V, VF, SizeArgs...>::random01() 
     {
         return V::from_raw((rnd() & ((1 << 16) - 1)));
     }
 
-    template <typename P, typename V, typename VF, size_t N, size_t M>
-    std::tuple<V, bool, std::pair<int, int>> Simulation<P, V, VF, N, M>::propagate_flow(int x, int y, V lim) 
+    template <typename P, typename V, typename VF, size_t... SizeArgs>
+    std::tuple<V, bool, std::pair<int, int>> Simulation<P, V, VF, SizeArgs...>::propagate_flow(int x, int y, V lim) 
     {
         last_use_[x][y] = UT - 1;
         VF ret = 0;
@@ -261,8 +250,8 @@ namespace fluid
         return {ret, 0, {0, 0}};
     } // Simulation:propagate_flow
 
-    template <typename P, typename V, typename VF, size_t N, size_t M>
-    bool Simulation<P, V, VF, N, M>::propagate_move(int x, int y, bool is_first) 
+    template <typename P, typename V, typename VF, size_t... SizeArgs>
+    bool Simulation<P, V, VF, SizeArgs...>::propagate_move(int x, int y, bool is_first) 
     {
         last_use_[x][y] = UT - is_first;
         bool ret = false;
@@ -328,8 +317,8 @@ namespace fluid
     } //  Simulation::propagate_move
 
 
-    template <typename P, typename V, typename VF, size_t N, size_t M>
-    void Simulation<P, V, VF, N, M>::propagate_stop(int x, int y, bool force) 
+    template <typename P, typename V, typename VF, size_t... SizeArgs>
+    void Simulation<P, V, VF, SizeArgs...>::propagate_stop(int x, int y, bool force) 
     {
         if (!force) 
         {
@@ -363,8 +352,8 @@ namespace fluid
         }
     } // Simulation::propagate_stop
 
-    template <typename P, typename V, typename VF, size_t N, size_t M>
-    V Simulation<P, V, VF, N, M>::move_prob(int x, int y) 
+    template <typename P, typename V, typename VF, size_t... SizeArgs>
+    V Simulation<P, V, VF, SizeArgs...>::move_prob(int x, int y) 
     {
         V sum = 0;
         for (size_t i = 0; i < deltas.size(); ++i) {
