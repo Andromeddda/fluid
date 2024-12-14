@@ -30,7 +30,7 @@ namespace fluid
 
     // If no parameters passed as SizeArgs, choose DynamicMatrix and construct all fields in runtime
     // Otherwise, choose StaticMatrix and construct all fields in compile time
-    //      (in this case passing N and M to constructor will do nothing)
+    //      (in this case passing N and M to constructor will only check matching with template)
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
     class Simulation : public AbstractSimulation

@@ -11,7 +11,7 @@ namespace fluid
     public:
         Matrix() {};
         virtual T* operator[] (size_t index) = 0;
-        virtual ~Matrix() = 0;
+        virtual ~Matrix() = default;
 
         virtual size_t get_n() const = 0;
         virtual size_t get_m() const = 0;
@@ -136,7 +136,8 @@ namespace fluid
     template <typename T>
     DynamicMatrix<T>::DynamicMatrix(const DynamicMatrix<T>& other)
     : n(other.n), m(other.m)
-    {  
+    {
+        allocate();
         for (auto i = 0LU; i < n; i++)
             std::memcpy(data[i], other.data[i], sizeof(T) * m);
     }

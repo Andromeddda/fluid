@@ -36,8 +36,7 @@ namespace fluid
         operator bool() const { return (n == N) && (m == M); }
     };
 
-    // Get sizes
-
+    // Get sizes variables from template arguments 
     template <size_t ...SizeArgs>
     struct GetSizes;
 

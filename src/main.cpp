@@ -1,5 +1,7 @@
 #include <bits/stdc++.h>
 
+#include <iostream>
+
 #include "fixed.hpp"
 #include "vector_field.hpp"
 #include "simulation.hpp"
@@ -42,4 +44,13 @@ int main() {
     // simulation.set_rho('.', 1000);
 
     // simulation.run(std::cout);
+
+
+    DynamicMatrix<int> a(4, 4);
+
+    a[3][3] = 9;
+
+    DynamicMatrix<int> b = a;
+
+    std::cout << b[3][3];
 }
