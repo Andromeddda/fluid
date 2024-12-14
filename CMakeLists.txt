@@ -28,4 +28,10 @@ endif()
 
 add_executable(${CMAKE_PROJECT_NAME} ${SOURCES})
 
-target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE src)
+target_include_directories(${CMAKE_PROJECT_NAME} 
+    PRIVATE 
+    src/
+    src/constexpr/
+    src/simulation/
+    src/io/
+    src/types/)
