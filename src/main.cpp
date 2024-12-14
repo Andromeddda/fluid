@@ -32,13 +32,13 @@ char field[N][M + 1] = {
 // static constexpr Fixed eps = Fixed::from_raw(deltas.size());
 
 int main() {
-    Fixed<32, 16> g = 0.1;
+    // Fixed<32, 16> g = 0.1;
 
-    Simulation<Fixed<32, 16>, Fixed<32, 16>, Fixed<64, 20>, N, M> simulation(field);
+    // Simulation<Fixed<32, 16>, Fixed<32, 16>, Fixed<64, 20>, N, M> simulation(field);
 
-    simulation.set_g(g);
-    simulation.set_rho(' ', 0.01);
-    simulation.set_rho('.', 1000);
+    // simulation.set_g(g);
+    // simulation.set_rho(' ', 0.01);
+    // simulation.set_rho('.', 1000);
 
-    simulation.run(std::cout);
+    // simulation.run(std::cout);
 }

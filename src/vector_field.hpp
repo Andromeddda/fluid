@@ -10,26 +10,31 @@
 #include <bits/stdc++.h>
 
 #include "deltas.hpp"
+#include "matrix_processing.hpp"
 
 namespace fluid
 {
-    template <typename Type, size_t N, size_t M>
+    template <typename Type, size_t... SizeArgs>
     struct VectorField 
     {
-        std::array<Type, deltas.size()> v[N][M];
+        VectorField(size_t n, size_t m) : v(n, m) {}
+
+        using vector_t = typename std::array<Type, deltas.size()>;
+
+        MatrixType<vector_t, SizeArgs...>::type v;
 
         Type& add(int x, int y, int dx, int dy, Type dv);
         Type& get(int x, int y, int dx, int dy);
     };
 
-    template <typename Type, size_t N, size_t M>
-    Type& VectorField<Type, N, M>::add(int x, int y, int dx, int dy, Type dv) 
+    template <typename Type, size_t... SizeArgs>
+    Type& VectorField<Type, SizeArgs...>::add(int x, int y, int dx, int dy, Type dv) 
     {
         return get(x, y, dx, dy) += dv;
     }
 
-    template <typename Type, size_t N, size_t M>
-    Type& VectorField<Type, N, M>::get(int x, int y, int dx, int dy) 
+    template <typename Type, size_t... SizeArgs>
+    Type& VectorField<Type, SizeArgs...>::get(int x, int y, int dx, int dy) 
     {
         size_t i = std::ranges::find(deltas, std::pair(dx, dy)) - deltas.begin();
         assert(i < deltas.size());

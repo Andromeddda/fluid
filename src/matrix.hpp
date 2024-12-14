@@ -21,7 +21,7 @@ namespace fluid
     class StaticMatrix : Matrix<T>
     {
     public:
-        StaticMatrix() {};
+        StaticMatrix(size_t n, size_t m) {};
         StaticMatrix(const StaticMatrix& other);
         StaticMatrix& operator= (const StaticMatrix& other);
 

@@ -18,26 +18,25 @@ namespace fluid
 {
     constexpr size_t T = 1'000'000;
 
-    template <typename T, size_t ... Args>
-    struct MatrixType;
+    // SizeArgs... can either be 0 or 2 parameters
+    // Otherwise MatrixType will throw compile error
 
-    template <typename T>
-    struct MatrixType<T>        { using type = DynamicMatrix<T>; };
-
-    template <typename T, size_t N, size_t M>
-    struct MatrixType<T, N, M>  { using type = StaticMatrix<T, N, M>; };
-
+    // If no parameters passed as SizeArgs, choose DynamicMatrix and construct all fields in runtime
+    // Otherwise, choose StaticMatrix and construct all fields in compile time
+    //      (in this case passing N and M to constructor will do nothing)
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
     class Simulation
     {
         MatrixType<char, SizeArgs...>::type field_;
-
     public:
+        Simulation(size_t n, size_t m);
         void run(std::ostream& os);
 
     private:
         friend class ParticleParams<P, V>;
+
+        size_t N, M;
 
         P   g_;
         P   rho_[256];
@@ -48,8 +47,8 @@ namespace fluid
         MatrixType<int, SizeArgs...>::type last_use_;
         MatrixType<int, SizeArgs...>::type dirs_;
 
-        VectorField<V, N, M>   velocity_;
-        VectorField<VF, N, M>  velocity_flow_;
+        VectorField<V, SizeArgs...>   velocity_;
+        VectorField<VF, SizeArgs...>  velocity_flow_;
 
         int UT = 0;
 
@@ -62,6 +61,13 @@ namespace fluid
         V       random01();
 
     }; // class Simulation
+
+    template <typename P, typename V, typename VF, size_t... SizeArgs>
+    Simulation<P, V, VF, SizeArgs...>::Simulation(size_t n, size_t m)
+    : field_(n, m), p_(n, m), old_p_(n, m), last_use_(n, m), dirs_(m, m), velocity_(n, m), velocity_flow_(n, m)
+    {
+        assert(SizesMatch<SizeArgs...>(n, m));
+    }
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
     void Simulation<P, V, VF, SizeArgs...>::run(std::ostream& os)
@@ -90,7 +96,7 @@ namespace fluid
 
             // Apply forces from p_
             // memcpy(old_p_, p_, sizeof(p_));
-            old_p_ = p;
+            old_p_ = p_;
             for (size_t x = 0; x < N; ++x) 
                 for (size_t y = 0; y < M; ++y) 
                 {
