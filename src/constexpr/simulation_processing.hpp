@@ -15,7 +15,16 @@ namespace fluid
         TypeDescriptor p;
         TypeDescriptor v;
         TypeDescriptor vf;
-        std::pair<size_t, size_t> size;
+        size_t N;
+        size_t M;
+    };
+
+    // if N = 0 or M == 0 use Simulation with dynamic allocation
+    // otherwise use simulation with static allocation
+    template <typename P, typename V, typename VF, size_t N, size_t M>
+    struct GetSimulationTypeHelper
+    {
+        using type = typename std::conditional<N != 0 && M != 0, Simulation<P, V, VF, N, M>, Simulation<P, V, VF>>::type;
     };
 
     template <SimulationDescriptor SD>
@@ -25,7 +34,7 @@ namespace fluid
         using V  =  typename GetType<SD.v.flag,  SD.v.N,  SD.v.M>::type;
         using VF =  typename GetType<SD.vf.flag, SD.vf.N, SD.vf.M>::type;
 
-        using type = Simulation<P, V, VF, SD.size.first, SD.size.second>;
+        using type = typename GetSimulationTypeHelper<P, V, VF, SD.N, SD.M>::type;
     };
 
     typedef typename std::array<SimulationDescriptor, template_combination_number> SimulationDescriptorArray;
@@ -33,6 +42,7 @@ namespace fluid
     //
     // Produce array of descriptors of all possible simulations in compile-time
     //
+
     constexpr SimulationDescriptorArray make_descriptors_constexpr()
     {
         SimulationDescriptorArray result;
@@ -41,8 +51,8 @@ namespace fluid
         for (auto P_descriptor : types)
             for (auto V_descriptor : types)
                 for (auto VF_descriptor : types)
-                    for (auto Shape : sizes)
-                        result[i++] = SimulationDescriptor(P_descriptor, V_descriptor, VF_descriptor, Shape);
+                    for (auto& [N, M] : sizes)
+                        result[i++] = SimulationDescriptor(P_descriptor, V_descriptor, VF_descriptor, N, M);
         return result;
     }
 

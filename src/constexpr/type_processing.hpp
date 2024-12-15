@@ -35,7 +35,7 @@ namespace fluid
         #error "types are not defined"    
     #endif
 
-    constexpr std::array sizes = {SIZES};
+    constexpr std::array sizes = {SIZES, std::pair<size_t, size_t>{0, 0}};
     constexpr std::array types = {TYPES};
 
     #undef S
