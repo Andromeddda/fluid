@@ -4,6 +4,4 @@ cmake -DCMAKE_BUILD_TYPE="RELEASE" -B "./build" -S "." -DTYPES="FAST_FIXED(16,8)
 
 cmake --build build --target fluid -j 4
 
-@printf "Starting simulation with P = V = VF = FIXED(32,16) and dynamic size S(14,5)"
-
-./build/fluid '--p-type=FIXED(32,16)' '--v-type=FIXED(32,16)' '--vf-type=FIXED(32,16)' './data/1.in'
+./build/fluid '--p-type=FIXED(32,16)' '--v-type=FIXED(32,16)' '--vf-type=FIXED(32,16)' './data/1.in' '--save-to=data/1_save.in'

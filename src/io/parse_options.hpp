@@ -26,11 +26,13 @@ namespace fluid
         TypeDescriptor v;
         TypeDescriptor vf;
         std::string filename;
+        std::string save_filename;
     };
 
-    static const char p_option[] = "--p-type=";
-    static const char v_option[] = "--v-type=";
+    static const char p_option[]  = "--p-type=";
+    static const char v_option[]  = "--v-type=";
     static const char vf_option[] = "--vf-type=";
+    static const char save_to[]   = "--save-to=";
 
     TypeDescriptor parse_type(char* type_str);
 
@@ -38,11 +40,11 @@ namespace fluid
     {
         Options result;
 
-        if (argc != 5)
+        if (argc != 6)
         {
             std::cout << "Incorrect amount of arguments provided.\n";
             std::cout << "Usage:\n";
-            std::cout << "./build/fluid --p-type=... --v-type=... --vf-type=... <filename>\n";
+            std::cout << "./build/fluid --p-type=... --v-type=... --vf-type=... <filename> --save-to=...\n";
             exit(-1);
         }
 
@@ -63,6 +65,12 @@ namespace fluid
             if (std::strncmp(argv[i], vf_option, 10) == 0)
             {
                 result.vf = parse_type(argv[i] + 10);
+                continue;
+            }
+
+            if (std::strncmp(argv[i], save_to, 10) == 0)
+            {
+                result.save_filename = std::string(argv[i] + 10);
                 continue;
             }
 

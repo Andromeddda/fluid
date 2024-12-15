@@ -10,6 +10,10 @@
 #include <ranges>
 #include <iterator>
 #include <algorithm>
+#include <fstream>
+
+#include <thread>
+#include <atomic>
 
 #include "vector_field.hpp"
 #include "particle_params.hpp"
@@ -27,7 +31,7 @@ namespace fluid
         AbstractSimulation() {};
         virtual ~AbstractSimulation() {};
 
-        virtual void run(std::ostream& os) = 0;
+        virtual void run(std::ostream& os, const std::string& save_to) = 0;
 
         virtual void set_field(size_t i, size_t j, char c) = 0;
     };
@@ -48,7 +52,7 @@ namespace fluid
 
         Simulation& operator= (const Simulation& other) = default;
 
-        void run(std::ostream& os);
+        void run(std::ostream& os, const std::string& save_to);
 
         void set_field(size_t i, size_t j, char c) override;
     private:
@@ -76,7 +80,16 @@ namespace fluid
         V       move_prob(int x, int y);
         bool    propagate_move(int x, int y, bool is_first);
         void    propagate_stop(int x, int y, bool force = false);
+
+        void    tick(std::ostream& os, size_t i);
+        void    cycle(std::ostream& os, size_t& i);
+
+        void    save(const std::string& save_to);
+
         std::tuple<V, bool, std::pair<int, int>> propagate_flow(int x, int y, V lim);
+
+
+        std::atomic<bool> save_{false};
 
     }; // class Simulation
 
@@ -110,7 +123,180 @@ namespace fluid
     }
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
-    void Simulation<P, V, VF, SizeArgs...>::run(std::ostream& os)
+    void Simulation<P, V, VF, SizeArgs...>::tick(std::ostream& os, size_t i)
+    {
+        P total_delta_p = 0;
+        // Apply external forces (gravity) 
+        for (size_t x = 0; x < N; ++x) 
+        {
+            for (size_t y = 0; y < M; ++y) 
+            {
+                if (field_[x][y] == '#')
+                    continue;
+                if (field_[x + 1][y] != '#')
+                    velocity_.add(x, y, 1, 0, g_);
+            }
+        }
+
+        // Apply forces from p_
+        old_p_ = p_;
+        for (size_t x = 0; x < N; ++x) 
+            for (size_t y = 0; y < M; ++y) 
+            {
+                if (field_[x][y] == '#')
+                    continue;
+
+                for (auto [dx, dy] : deltas) 
+                {
+                    int nx = x + dx, ny = y + dy;
+                    if (field_[nx][ny] != '#' && old_p_[nx][ny] < old_p_[x][y]) 
+                    {
+                        auto delta_p = old_p_[x][y] - old_p_[nx][ny];
+                        auto force = delta_p;
+                        auto &contr = velocity_.get(nx, ny, -dx, -dy);
+
+                        if (contr * rho_[(int) field_[nx][ny]] >= force) 
+                        {
+                            contr -= force / rho_[(int) field_[nx][ny]];
+                            continue;
+                        }
+
+                        force -= contr * rho_[(int) field_[nx][ny]];
+                        contr = 0;
+                        velocity_.add(x, y, dx, dy, force / rho_[(int) field_[x][y]]);
+                        p_[x][y] -= force / dirs_[x][y];
+                        total_delta_p -= force / dirs_[x][y];
+                    }
+                }
+            }
+
+        // Make flow from velocities
+        velocity_flow_.v.reset();
+        bool prop = false;
+        do 
+        {
+            UT += 2;
+            prop = 0;
+            for (size_t x = 0; x < N; ++x) 
+                for (size_t y = 0; y < M; ++y) 
+                    if (field_[x][y] != '#' && last_use_[x][y] != UT) 
+                    {
+                        auto [t, local_prop, _] = propagate_flow(x, y, 1);
+                        if (t > 0)
+                            prop = 1;
+                    }
+        } while (prop);
+
+        // Recalculate p_ with kinetic energy
+        for (size_t x = 0; x < N; ++x) 
+        {
+            for (size_t y = 0; y < M; ++y) 
+            {
+                if (field_[x][y] == '#')
+                    continue;
+                for (auto [dx, dy] : deltas) 
+                {
+                    V old_v = velocity_.get(x, y, dx, dy);
+                    V new_v = velocity_flow_.get(x, y, dx, dy);
+
+                    if (old_v > 0) 
+                    {
+                        if (new_v > old_v) 
+                        {
+                            std::cout << "SIMULATION ERROR: " << new_v << " > " << old_v << '\n';
+                            assert(new_v <= old_v);
+                        }
+
+                        velocity_.get(x, y, dx, dy) = new_v;
+                        V force = (old_v - new_v) * rho_[(int) field_[x][y]];
+
+                        if (field_[x][y] == '.')
+                            force *= 0.8;
+
+                        if (field_[x + dx][y + dy] == '#') 
+                        {
+                            p_[x][y] += force / dirs_[x][y];
+                            total_delta_p += force / dirs_[x][y];
+                        } 
+                        else 
+                        {
+                            p_[x + dx][y + dy] += force / dirs_[x + dx][y + dy];
+                            total_delta_p += force / dirs_[x + dx][y + dy];
+                        }
+                    }
+                }
+            }
+        }
+
+        UT += 2;
+        prop = false;
+        for (size_t x = 0; x < N; ++x) 
+        {
+            for (size_t y = 0; y < M; ++y) 
+            {
+                if (field_[x][y] != '#' && last_use_[x][y] != UT) 
+                {
+                    if (random01<P>() < move_prob(x, y)) 
+                    {
+                        prop = true;
+                        propagate_move(x, y, true);
+                    } 
+                    else 
+                    {
+                        propagate_stop(x, y, true);
+                    }
+                }
+            }
+        }
+
+        if (prop) 
+        {
+            os << "Tick " << i << ":\n";
+            for (size_t x = 0; x < N; ++x) 
+            {
+                for (size_t y = 0; y < M; ++y)
+                    os << field_[x][y];
+                os << std::endl;
+            }
+        }
+    }
+
+    template <typename P, typename V, typename VF, size_t... SizeArgs>
+    void Simulation<P, V, VF, SizeArgs...>::cycle(std::ostream& os, size_t& i)
+    {
+        for (; i < T; ++i)
+        {
+            tick(os, i);
+            std::this_thread::yield();
+            if (save_.load())
+                return;
+        }
+    }
+
+    template <typename P, typename V, typename VF, size_t... SizeArgs>
+    void Simulation<P, V, VF, SizeArgs...>::save(const std::string& save_to)
+    {
+        std::ofstream of;
+
+        // open to write
+        of.open(save_to);
+
+        assert(of.is_open());
+
+        of << N << " " << M << "\n";
+
+        for (size_t x = 0; x < N; ++x) 
+        {
+            for (size_t y = 0; y < M; ++y)
+                of.put(field_[x][y]);
+            of.put('\n');
+        }
+
+        of.close();
+    }
+
+    template <typename P, typename V, typename VF, size_t... SizeArgs>
+    void Simulation<P, V, VF, SizeArgs...>::run(std::ostream& os, const std::string& save_to)
     {
         // initialize dirs
         for (size_t x = 0; x < N; ++x) 
@@ -124,145 +310,20 @@ namespace fluid
             }
         }
 
-        // process one tick
-        for (size_t i = 0; i < T; ++i) 
-        {    
-            P total_delta_p = 0;
-            // Apply external forces (gravity) 
-            for (size_t x = 0; x < N; ++x) 
-            {
-                for (size_t y = 0; y < M; ++y) 
-                {
-                    if (field_[x][y] == '#')
-                        continue;
-                    if (field_[x + 1][y] != '#')
-                        velocity_.add(x, y, 1, 0, g_);
-                }
-            }
+        size_t i = 0;
 
-            // Apply forces from p_
-            // memcpy(old_p_, p_, sizeof(p_));
-            old_p_ = p_;
-            for (size_t x = 0; x < N; ++x) 
-                for (size_t y = 0; y < M; ++y) 
-                {
-                    if (field_[x][y] == '#')
-                        continue;
+        // run the cycle in another thread
+        std::thread thrd(&Simulation<P, V, VF, SizeArgs...>::cycle, this, std::ref(os), std::ref(i));
 
-                    for (auto [dx, dy] : deltas) 
-                    {
-                        int nx = x + dx, ny = y + dy;
-                        if (field_[nx][ny] != '#' && old_p_[nx][ny] < old_p_[x][y]) 
-                        {
-                            auto delta_p = old_p_[x][y] - old_p_[nx][ny];
-                            auto force = delta_p;
-                            auto &contr = velocity_.get(nx, ny, -dx, -dy);
+        // expect '\n'
+        int c;
+        while ((c = getchar() != 10)) {}
 
-                            if (contr * rho_[(int) field_[nx][ny]] >= force) 
-                            {
-                                contr -= force / rho_[(int) field_[nx][ny]];
-                                continue;
-                            }
+        save_.store(true);
+        thrd.join();
 
-                            force -= contr * rho_[(int) field_[nx][ny]];
-                            contr = 0;
-                            velocity_.add(x, y, dx, dy, force / rho_[(int) field_[x][y]]);
-                            p_[x][y] -= force / dirs_[x][y];
-                            total_delta_p -= force / dirs_[x][y];
-                        }
-                    }
-                }
-
-            // Make flow from velocities
-            velocity_flow_.v.reset();
-            bool prop = false;
-            do 
-            {
-                UT += 2;
-                prop = 0;
-                for (size_t x = 0; x < N; ++x) 
-                    for (size_t y = 0; y < M; ++y) 
-                        if (field_[x][y] != '#' && last_use_[x][y] != UT) 
-                        {
-                            auto [t, local_prop, _] = propagate_flow(x, y, 1);
-                            if (t > 0)
-                                prop = 1;
-                        }
-            } while (prop);
-
-            // Recalculate p_ with kinetic energy
-            for (size_t x = 0; x < N; ++x) 
-            {
-                for (size_t y = 0; y < M; ++y) 
-                {
-                    if (field_[x][y] == '#')
-                        continue;
-                    for (auto [dx, dy] : deltas) 
-                    {
-                        V old_v = velocity_.get(x, y, dx, dy);
-                        V new_v = velocity_flow_.get(x, y, dx, dy);
-
-                        if (old_v > 0) 
-                        {
-                            if (new_v > old_v) 
-                            {
-                                std::cout << "SIMULATION ERROR: " << new_v << " > " << old_v << '\n';
-                                assert(new_v <= old_v);
-                            }
-
-                            velocity_.get(x, y, dx, dy) = new_v;
-                            V force = (old_v - new_v) * rho_[(int) field_[x][y]];
-
-                            if (field_[x][y] == '.')
-                                force *= 0.8;
-
-                            if (field_[x + dx][y + dy] == '#') 
-                            {
-                                p_[x][y] += force / dirs_[x][y];
-                                total_delta_p += force / dirs_[x][y];
-                            } 
-                            else 
-                            {
-                                p_[x + dx][y + dy] += force / dirs_[x + dx][y + dy];
-                                total_delta_p += force / dirs_[x + dx][y + dy];
-                            }
-                        }
-                    }
-                }
-            }
-
-            UT += 2;
-            prop = false;
-            for (size_t x = 0; x < N; ++x) 
-            {
-                for (size_t y = 0; y < M; ++y) 
-                {
-                    if (field_[x][y] != '#' && last_use_[x][y] != UT) 
-                    {
-                        if (random01<P>() < move_prob(x, y)) 
-                        {
-                            prop = true;
-                            propagate_move(x, y, true);
-                        } 
-                        else 
-                        {
-                            propagate_stop(x, y, true);
-                        }
-                    }
-                }
-            }
-
-            if (prop) 
-            {
-                os << "Tick " << i << ":\n";
-                for (size_t x = 0; x < N; ++x) 
-                {
-                    for (size_t y = 0; y < M; ++y)
-                        os << field_[x][y];
-                    os << std::endl;
-                }
-            }
-        }
+        std::cout << "saving to file " << save_to << '\n';
+        save(save_to);
     } // Simulation::run
 
 
