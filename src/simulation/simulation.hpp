@@ -18,22 +18,15 @@ namespace fluid
 {
     constexpr size_t T = 1'000'000;
 
-    class Reader; // forward declaration
-
     class AbstractSimulation
     {
     public:
         AbstractSimulation() {};
         virtual ~AbstractSimulation() {};
 
-        virtual void run(std::ostream&) = 0;
-    private:
-        friend class Reader;
+        virtual void run(std::ostream& os) = 0;
 
         virtual void set_field(size_t i, size_t j, char c) = 0;
-        virtual void set_rho(char c, double rho) = 0;
-        virtual void set_g(double g) = 0;
-        
     };
 
     // SizeArgs... can either be 0 or 2 parameters
@@ -51,9 +44,9 @@ namespace fluid
         Simulation(size_t n, size_t m);
         void run(std::ostream& os);
 
+        void set_field(size_t i, size_t j, char c) override;
     private:
         friend class ParticleParams<P, V>;
-        friend class Reader;
 
         size_t N, M;
         MatrixType<char, SizeArgs...>::type field_;
@@ -80,11 +73,6 @@ namespace fluid
         std::tuple<V, bool, std::pair<int, int>> propagate_flow(int x, int y, V lim);
         V       random01();
 
-
-        void set_field(size_t i, size_t j, char c) override;
-        void set_rho(char c, double rho) override;
-        void set_g(double g) override;
-
     }; // class Simulation
 
 
@@ -93,11 +81,12 @@ namespace fluid
     : 
         N(GetSizes<SizeArgs...>::n), M(GetSizes<SizeArgs...>::m),
         field_(N, M), p_(N, M), old_p_(N, M), last_use_(N, M), dirs_(N, M), velocity_(N, M), velocity_flow_(N, M)
-    {
+    { 
         g_ = 0.1;
         rho_[' '] = 0.01;
         rho_['.'] = 1000; 
     }
+
 
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
@@ -110,29 +99,19 @@ namespace fluid
         rho_['.'] = 1000; 
     }
 
+
     template <typename P, typename V, typename VF, size_t... SizeArgs>
-    void Simulation<P, V, VF, SizeArgs...>::set_field(size_t i, size_t j, char c)
+    void Simulation<P, V, VF, SizeArgs...>::set_field(size_t i, size_t j, char c) 
     {
         field_[i][j] = c;
-    }
-
-
-   template <typename P, typename V, typename VF, size_t... SizeArgs>
-    void Simulation<P, V, VF, SizeArgs...>::set_rho(char c, double rho)
-    {
-        rho_[(size_t)c] = rho;
-    }    
-
-    template <typename P, typename V, typename VF, size_t... SizeArgs>
-    void Simulation<P, V, VF, SizeArgs...>::set_g(double g) 
-    {
-        g_ = g;
     }
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
     void Simulation<P, V, VF, SizeArgs...>::run(std::ostream& os)
     {
+        // initialize dirs
         for (size_t x = 0; x < N; ++x) 
+        {
             for (size_t y = 0; y < M; ++y) 
             {
                 if (field_[x][y] == '#')
@@ -140,13 +119,17 @@ namespace fluid
                 for (auto [dx, dy] : deltas) 
                     dirs_[x][y] += (field_[x + dx][y + dy] != '#');
             }
+        }
 
+        // process one tick
         for (size_t i = 0; i < T; ++i) 
         {    
             P total_delta_p = 0;
-            // Apply external forces
-            for (size_t x = 0; x < N; ++x) {
-                for (size_t y = 0; y < M; ++y) {
+            // Apply external forces (gravity) 
+            for (size_t x = 0; x < N; ++x) 
+            {
+                for (size_t y = 0; y < M; ++y) 
+                {
                     if (field_[x][y] == '#')
                         continue;
                     if (field_[x + 1][y] != '#')
@@ -218,7 +201,7 @@ namespace fluid
 
                         if (old_v > 0) 
                         {
-                            // assert(new_v <= old_v);
+                            assert(new_v <= old_v);
                             velocity_.get(x, y, dx, dy) = new_v;
                             V force = (old_v - new_v) * rho_[(int) field_[x][y]];
 
@@ -268,7 +251,7 @@ namespace fluid
                 {
                     for (size_t y = 0; y < M; ++y)
                         os << field_[x][y];
-                    os << '\n';
+                    os << std::endl;
                 }
             }
         }

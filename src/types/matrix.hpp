@@ -21,7 +21,7 @@ namespace fluid
     class StaticMatrix : Matrix<T>
     {
     public:
-        StaticMatrix(size_t n, size_t m) { assert(n == N && m == M); };
+        StaticMatrix(size_t n, size_t m) { assert(n == N && m == M); reset(); };
         StaticMatrix(const StaticMatrix& other);
         StaticMatrix& operator= (const StaticMatrix& other);
 
@@ -33,12 +33,12 @@ namespace fluid
         size_t get_m() const override;
 
         void reset();
+
     private:
         T data[N][M];
 
         const size_t n = N;
         const size_t m = M;
-
     };
 
 
@@ -58,6 +58,7 @@ namespace fluid
         size_t get_m() const override;
 
         void reset();
+
     private:
         void allocate();
         void deallocate();
@@ -67,7 +68,6 @@ namespace fluid
 
         size_t n;
         size_t m;
-
     };
 
     // Static Matrix
@@ -99,7 +99,7 @@ namespace fluid
     {
         for (auto i = 0LU; i < n; i++)
             for (auto j = 0LU; j < m; j++)
-                data[i][j] = T{};
+                (*this)[i][j] = T{};
     }
 
     template <typename T, size_t N, size_t M>
@@ -129,31 +129,24 @@ namespace fluid
     }
 
     template <typename T>
+    void DynamicMatrix<T>::reset()
+    {
+        for (auto i = 0LU; i < n; i++)
+            for (auto j = 0LU; j < m; j++)
+                (*this)[i][j] = T{};
+    }
+
+    template <typename T>
     void DynamicMatrix<T>::allocate()
     {
-        if (n == 0 || m == 0)
-            return;
-
         data = new T*[n];
         for (auto i = 0LU; i < n; i++)
             data[i] = new T[m];
     }
 
-
-    template <typename T>
-    void DynamicMatrix<T>::reset()
-    {
-        for (auto i = 0LU; i < n; i++)
-            for (auto j = 0LU; j < m; j++)
-                data[i][j] = T{};
-    }
-
     template <typename T>
     void DynamicMatrix<T>::deallocate()
     {
-        if (n == 0 || m == 0)
-            return;
-
         for (auto i = 0LU; i < n; i++)
             delete[] data[i];
         delete[] data;

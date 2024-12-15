@@ -27,7 +27,7 @@ namespace fluid
     struct GetSimulationTypeHelper
     {
         typedef 
-            typename std::conditional<N != 0 && M != 0, Simulation<P, V, VF, N, M>, Simulation<P, V, VF>>::type
+            typename std::conditional<(N != 0) && (M != 0), Simulation<P, V, VF, N, M>, Simulation<P, V, VF>>::type
             type;
     };
 
@@ -67,11 +67,7 @@ namespace fluid
     //
 
     typedef typename std::shared_ptr<AbstractSimulation>                         SimulationPtr;
-    // typedef typename std::function<SimulationPtr()>                              SimulationProducer;
-
-    // typedef SimulationPtr(*)()                                                   SimulationProducer;
-
-    using SimulationProducer = SimulationPtr(*)();
+    typedef typename std::function<SimulationPtr()>                              SimulationProducer;
     typedef typename std::array<SimulationProducer, template_combination_number> ProducerArray;
 
     ProducerArray producers;
@@ -83,9 +79,7 @@ namespace fluid
 
         IterateDescriptors() 
         { 
-            // producers[index - 1] = SimulationProducer(producer);
-            // std::cout << "IterateDescriptors<" << index << ">()\n";
-            producers[index - 1] = producer;
+            producers[index - 1] = SimulationProducer(producer);        
         }
 
         static SimulationPtr producer()  
