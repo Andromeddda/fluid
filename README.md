@@ -33,7 +33,7 @@ cmake --build build --target fluid -j 4
 ## Launching
 * The order of command line options is arbitrary
 ```
-./build/fluid --p-type='...' --v-type='...' --vf-type='...' filename
+./build/fluid --p-type='...' --v-type='...' --vf-type='...' filename --save-to=file
 ```
 * The project also has two bash scripts that build and launch prepared examples
 ```
@@ -42,3 +42,6 @@ cmake --build build --target fluid -j 4
 ```
 ./launch_example_2
 ```
+
+## Saving to file
+* To save current field position to file, type newline character (``'\n'`` or ASCII 10) by pressing [ENTER]
