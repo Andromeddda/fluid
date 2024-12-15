@@ -117,6 +117,9 @@ namespace fluid
     template <typename T>
     void DynamicMatrix<T>::allocate()
     {
+        if (n == 0 || m == 0)
+            return;
+
         data = new T*[n];
         for (auto i = 0LU; i < n; i++)
             data[i] = new T[m];
@@ -125,6 +128,9 @@ namespace fluid
     template <typename T>
     void DynamicMatrix<T>::deallocate()
     {
+        if (n == 0 || m == 0)
+            return;
+
         for (auto i = 0LU; i < n; i++)
             delete[] data[i];
         delete[] data;

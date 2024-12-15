@@ -18,6 +18,8 @@ namespace fluid
 {
     constexpr size_t T = 1'000'000;
 
+    class Reader; // forward declaration
+
     class AbstractSimulation
     {
     public:
@@ -42,6 +44,7 @@ namespace fluid
 
     private:
         friend class ParticleParams<P, V>;
+        friend class Reader;
 
         size_t N, M;
         MatrixType<char, SizeArgs...>::type field_;

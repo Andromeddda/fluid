@@ -46,11 +46,13 @@ int main() {
     // simulation.run(std::cout);
 
 
-    DynamicMatrix<int> a(4, 4);
+    // DynamicMatrix<int> a(4, 4);
 
-    a[3][3] = 9;
+    // a[3][3] = 9;
 
-    DynamicMatrix<int> b = a;
+    // DynamicMatrix<int> b = a;
 
-    std::cout << b[3][3];
+    // std::cout << b[3][3];
+
+    
 }
