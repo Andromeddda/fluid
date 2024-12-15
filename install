@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 
 TARGET="fluid"
-BUILD="DEBUG"
+# BUILD="DEBUG"
+BUILD="RELEASE"
 
 ROOT_DIR="$(realpath "$(dirname -- "$0")")"
 BUILD_DIR="$ROOT_DIR/build"
 
 mkdir -p "$BUILD_DIR"
 
-cmake -DCMAKE_BUILD_TYPE="$BUILD" -B "$BUILD_DIR" -S "$ROOT_DIR" -DTYPES="FIXED(32,16)" -DSIZES="S(14,5),S(50,50),S(25,25)"
+cmake -DCMAKE_BUILD_TYPE="$BUILD" -B "$BUILD_DIR" -S "$ROOT_DIR" -DTYPES="FAST_FIXED(16,8),FIXED(32,16)" -DSIZES="S(36,84)"
 
 cmake --build "$BUILD_DIR" --target "$TARGET" -j 4

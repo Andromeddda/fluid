@@ -13,6 +13,7 @@
 #include "particle_params.hpp"
 #include "type_processing.hpp"
 #include "matrix.hpp"
+#include "random.hpp"
 
 namespace fluid
 {
@@ -23,6 +24,8 @@ namespace fluid
     public:
         AbstractSimulation() {};
         virtual ~AbstractSimulation() {};
+
+        // virtual AbstractSimulation& operator= (const AbstractSimulation& other) { return *this; };
 
         virtual void run(std::ostream& os) = 0;
 
@@ -42,6 +45,9 @@ namespace fluid
     public:
         Simulation();
         Simulation(size_t n, size_t m);
+
+        Simulation& operator= (const Simulation& other) = default;
+
         void run(std::ostream& os);
 
         void set_field(size_t i, size_t j, char c) override;
@@ -71,7 +77,7 @@ namespace fluid
         bool    propagate_move(int x, int y, bool is_first);
         void    propagate_stop(int x, int y, bool force = false);
         std::tuple<V, bool, std::pair<int, int>> propagate_flow(int x, int y, V lim);
-        V       random01();
+        // P       random01();
 
     }; // class Simulation
 
@@ -201,7 +207,12 @@ namespace fluid
 
                         if (old_v > 0) 
                         {
-                            assert(new_v <= old_v);
+                            if (new_v > old_v) 
+                            {
+                                std::cout << "SIMULATION ERROR: " << new_v << " > " << old_v << '\n';
+                                assert(new_v <= old_v);
+                            }
+
                             velocity_.get(x, y, dx, dy) = new_v;
                             V force = (old_v - new_v) * rho_[(int) field_[x][y]];
 
@@ -231,7 +242,7 @@ namespace fluid
                 {
                     if (field_[x][y] != '#' && last_use_[x][y] != UT) 
                     {
-                        if (random01() < move_prob(x, y)) 
+                        if (random01<P>() < move_prob(x, y)) 
                         {
                             prop = true;
                             propagate_move(x, y, true);
@@ -257,11 +268,6 @@ namespace fluid
         }
     } // Simulation::run
 
-    template <typename P, typename V, typename VF, size_t... SizeArgs>
-    V Simulation<P, V, VF, SizeArgs...>::random01() 
-    {
-        return V::from_raw((rnd() & ((1 << 16) - 1)));
-    }
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
     std::tuple<V, bool, std::pair<int, int>> Simulation<P, V, VF, SizeArgs...>::propagate_flow(int x, int y, V lim) 
@@ -309,8 +315,8 @@ namespace fluid
         int nx = -1, ny = -1;
         do 
         {
-            std::array<V, deltas.size()> tres;
-            V sum = 0;
+            std::array<P, deltas.size()> tres;
+            P sum = 0;
             for (size_t i = 0; i < deltas.size(); ++i) 
             {
                 auto [dx, dy] = deltas[i];
@@ -321,7 +327,7 @@ namespace fluid
                     tres[i] = sum;
                     continue;
                 }
-                V v = velocity_.get(x, y, dx, dy);
+                P v = velocity_.get(x, y, dx, dy);
                 if (v < 0) 
                 {
                     tres[i] = sum;
@@ -334,7 +340,7 @@ namespace fluid
             if (sum == 0)
                 break;
 
-            V p = random01() * sum;
+            P p = random01<P>() * sum;
             size_t d = std::ranges::upper_bound(tres, p) - tres.begin();
 
             auto [dx, dy] = deltas[d];

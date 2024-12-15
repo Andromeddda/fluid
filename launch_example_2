@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+cmake -DCMAKE_BUILD_TYPE="RELEASE" -B "./build" -S "." -DTYPES="FAST_FIXED(16,8),FIXED(32,16)" -DSIZES="S(36,84)"
+
+@printf "Starting simulation with P = V = VF = FIXED(8,3) and static size S(36,84)"
+
+./build/fluid '--p-type=FAST_FIXED(16,8)' '--v-type=FAST_FIXED(16,8)' '--vf-type=FAST_FIXED(16,8)' './data/2.in'

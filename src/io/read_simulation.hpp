@@ -56,7 +56,7 @@ namespace fluid
         // construct simulation
         SimulationDescriptor sd{p, v, vf, N, M};
         auto producer = get_producer(sd);
-        result = producer();
+        result = producer(N, M);
 
         // read ASCII art of field
         std::string line;

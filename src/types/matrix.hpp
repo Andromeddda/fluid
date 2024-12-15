@@ -2,6 +2,7 @@
 #define HEADER_GUARD_MATRIX_HPP
 
 #include <assert.h>
+#include <vector>
 
 namespace fluid
 {   
@@ -47,8 +48,8 @@ namespace fluid
     {
     public:
         DynamicMatrix(size_t n, size_t m);
-        DynamicMatrix(const DynamicMatrix& other);
-        DynamicMatrix& operator= (const DynamicMatrix& other);
+        DynamicMatrix(const DynamicMatrix& other) = default;
+        DynamicMatrix& operator= (const DynamicMatrix& other) = default;
 
         ~DynamicMatrix();
 
@@ -63,7 +64,8 @@ namespace fluid
         void allocate();
         void deallocate();
 
-        T** data;
+        // T** data;
+        std::vector<std::vector<T>> data;
 
         size_t n;
         size_t m;
@@ -115,16 +117,16 @@ namespace fluid
 
     template <typename T>
     DynamicMatrix<T>::DynamicMatrix(size_t n, size_t m)
-        : n(n), m(m)
+        : data(n, std::vector<T>(m, T{})), n(n), m(m)
     {
-        allocate();
-        reset();
+        // allocate();
+        // reset();
     }
 
     template <typename T>
     DynamicMatrix<T>::~DynamicMatrix()
     {
-        deallocate();
+        // deallocate();
     }
 
     template <typename T>
@@ -138,52 +140,53 @@ namespace fluid
     template <typename T>
     void DynamicMatrix<T>::allocate()
     {
-        data = new T*[n];
-        for (auto i = 0LU; i < n; i++)
-            data[i] = new T[m];
+        // data = new T*[n];
+        // for (auto i = 0LU; i < n; i++)
+        //     data[i] = new T[m];
     }
 
     template <typename T>
     void DynamicMatrix<T>::deallocate()
     {
-        for (auto i = 0LU; i < n; i++)
-            delete[] data[i];
-        delete[] data;
-        data = nullptr;
+        // for (auto i = 0LU; i < n; i++)
+        //     delete[] data[i];
+        // delete[] data;
+        // data = nullptr;
         n = 0LU;
         m = 0LU;
     }
 
-    template <typename T>
-    DynamicMatrix<T>::DynamicMatrix(const DynamicMatrix<T>& other)
-    : n(other.n), m(other.m)
-    {
-        allocate();
-        for (auto i = 0LU; i < n; i++)
-            std::memcpy(data[i], other.data[i], sizeof(T) * m);
-    }
+    // template <typename T>
+    // DynamicMatrix<T>::DynamicMatrix(const DynamicMatrix<T>& other)
+    // : n(other.n), m(other.m)
+    // {
+    //     allocate();
+    //     for (auto i = 0LU; i < n; i++)
+    //         std::memcpy(data[i], other.data[i], sizeof(T) * m);
+    // }
 
-    template <typename T>
-    DynamicMatrix<T>& DynamicMatrix<T>::operator= (const DynamicMatrix<T>& other)
-    {
-        if ((n != other.n) || (m != other.m))
-        {
-            deallocate();
-            n = other.n;
-            m = other.m;
-            allocate();
-        }
+    // template <typename T>
+    // DynamicMatrix<T>& DynamicMatrix<T>::operator= (const DynamicMatrix<T>& other)
+    // {
+    //     if ((n != other.n) || (m != other.m))
+    //     {
+    //         deallocate();
+    //         n = other.n;
+    //         m = other.m;
+    //         allocate();
+    //     }
 
-        for (auto i = 0LU; i < n; i++)
-            std::memcpy(data[i], other.data[i], sizeof(T) * m);
-        return *this;
-    }
+    //     for (auto i = 0LU; i < n; i++)
+    //         std::memcpy(data[i], other.data[i], sizeof(T) * m);
+    //     return *this;
+    // }
 
     template <typename T>
     T* DynamicMatrix<T>::operator[] (size_t index)
     {
-        assert(index < n);
-        return data[index];
+        // assert(index < n);
+        // return data[index];
+        return &data[index][0];
     }
 
     template <typename T>

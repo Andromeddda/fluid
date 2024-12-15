@@ -24,8 +24,8 @@ namespace fluid
     };
 
     #define S(N, M)             std::pair<size_t, size_t>{N, M}
-    #define FIXED(N, M)         fluid::TypeDescriptor{fluid::TypeFlag::Fixed_F,       N, M}
     #define FAST_FIXED(N, M)    fluid::TypeDescriptor{fluid::TypeFlag::FastFixed_F,   N, M}
+    #define FIXED(N, M)         fluid::TypeDescriptor{fluid::TypeFlag::Fixed_F,       N, M}
     #define FLOAT               fluid::TypeDescriptor{fluid::TypeFlag::Float_F,       0, 0}
     #define DOUBLE              fluid::TypeDescriptor{fluid::TypeFlag::Double_F,      0, 0}
 
@@ -37,8 +37,8 @@ namespace fluid
         #error "types are not defined"    
     #endif
 
-    constexpr std::array sizes = {SIZES, std::pair<size_t, size_t>{0, 0}};
-    constexpr std::array types = {TYPES};
+    constexpr static std::array sizes = {SIZES, std::pair<size_t, size_t>{0, 0}};
+    constexpr static std::array types = {TYPES};
 
     #undef S
     #undef FIXED
@@ -61,7 +61,7 @@ namespace fluid
     template <size_t N, size_t M>
     struct GetType<TypeFlag::Double_F, N, M>    { using type = double; };
 
-    constexpr const size_t 
+    constexpr const static size_t 
         template_combination_number = types.size() * types.size() * types.size() * sizes.size();
 
 } // namespace fluid

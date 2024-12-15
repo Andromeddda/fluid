@@ -48,17 +48,26 @@ namespace fluid
         constexpr Fixed(float f);
         constexpr Fixed(double f);
 
-        template <size_t N2, size_t K2>
-        constexpr Fixed(const Fixed<N2, K2, Fast>& other);
+        constexpr operator double() const { return (double)v / (1 << K); }
 
-        template <size_t N2, size_t K2>
-        Fixed& operator= (const Fixed<N2, K2, Fast>& other);
+        template <size_t N2, size_t K2, bool Fast2>
+        constexpr Fixed(const Fixed<N2, K2, Fast2>& other);
+
+        template <size_t N2, size_t K2, bool Fast2>
+        Fixed& operator= (const Fixed<N2, K2, Fast2>& other);
 
         static constexpr Fixed from_raw(int x);
 
-        auto operator<=>(const Fixed&) const = default;
-        bool operator==(const Fixed&) const = default;
+        // auto operator<=>(const Fixed& other) const { return v <=> other.v; };
+        // bool operator==(const Fixed& other) const { return v == other.v; };
     };
+
+
+    // template <size_t N, size_t K, bool Fast, typename T>
+    // bool operator== (Fixed<N, K, Fast> a, T b) 
+    // {
+    //     return a == Fixed<N, K, Fast>(b);
+    // }
 
     // Construct from fundamental type
 
@@ -74,8 +83,8 @@ namespace fluid
     // Convertion from Fixed to another Fixed
 
     template <size_t N1, size_t K1, bool Fast>
-    template <size_t N2, size_t K2>
-    constexpr Fixed<N1, K1, Fast>::Fixed(const Fixed<N2, K2, Fast>& other)
+    template <size_t N2, size_t K2, bool Fast2>
+    constexpr Fixed<N1, K1, Fast>::Fixed(const Fixed<N2, K2, Fast2>& other)
     {
         if constexpr (K1 >= K2)
             v = other.v << (K1 - K2);
@@ -110,19 +119,17 @@ namespace fluid
     template <size_t N, size_t K, bool Fast, typename T>
     Fixed<N, K, Fast> operator*(Fixed<N, K, Fast> a, T b) 
     {
-        return Fixed<N, K, Fast>::from_raw(((int64_t) a.v * Fixed<N, K, Fast>(b).v) >> 16);
+        return Fixed<N, K, Fast>::from_raw(((int64_t) a.v * Fixed<N, K, Fast>(b).v) >> K);
     }
 
     template <size_t N, size_t K, bool Fast, typename T>
     Fixed<N, K, Fast> operator/ (Fixed<N, K, Fast> a, T b) 
     {
-        return Fixed<N, K, Fast>::from_raw(((int64_t) a.v << 16) / Fixed<N, K, Fast>(b).v);
-    }
+        auto bv = Fixed<N, K, Fast>(b).v;
 
-    template <size_t N, size_t K, bool Fast, typename T>
-    bool operator== (Fixed<N, K, Fast> a, T b) 
-    {
-        return a == Fixed<N, K, Fast>(b);
+        if (bv == 0)
+            return a;
+        return Fixed<N, K, Fast>::from_raw(((int64_t) a.v << K) / bv);
     }
 
 
@@ -168,7 +175,7 @@ namespace fluid
     template <size_t N, size_t K, bool Fast>
     std::ostream &operator<<(std::ostream &out, Fixed<N, K, Fast> x) 
     {
-        return out << x.v / (double) (1 << 16);
+        return out << x.v / (double) (1 << K);
     }
 } // namespace fluid
 
