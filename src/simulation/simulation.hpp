@@ -22,7 +22,7 @@ namespace fluid
     {
     public:
         AbstractSimulation() {};
-        virtual ~AbstractSimulation() = 0;
+        virtual ~AbstractSimulation() {};
     };
 
     // SizeArgs... can either be 0 or 2 parameters

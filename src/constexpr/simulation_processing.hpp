@@ -49,12 +49,12 @@ namespace fluid
     constexpr SimulationDescriptorArray descriptors = make_descriptors_constexpr();
 
     //
-    // Produce array of all possible simulations in compile-time
+    // Produce array of functions (producers) that return all possible simulations
     //
 
-    typedef typename std::shared_ptr<AbstractSimulation>                    SimulationPtr;
-    typedef typename std::function<SimulationPtr()>                         SimulationProcucer;
-    typedef typename std::array<SimulationPtr, template_combination_number> ProducerArray;
+    typedef typename std::shared_ptr<AbstractSimulation>                         SimulationPtr;
+    typedef typename std::function<SimulationPtr()>                              SimulationProducer;
+    typedef typename std::array<SimulationProducer, template_combination_number> ProducerArray;
 
     ProducerArray producers;
 
@@ -63,14 +63,24 @@ namespace fluid
     {
         static IterateDescriptors<index - 1> previous;
 
-        IterateDescriptors() { 
-            producers[index - 1] = SimulationProcucer(producer);
+        IterateDescriptors() 
+        { 
+            producers[index - 1] = SimulationProducer(IterateDescriptors::producer);
         }
 
-        static SimulationPtr producer()  {
-            return GetSimulationType<descriptors[index - 1]>::type(); 
+        static SimulationPtr producer()  
+        {
+            return SimulationPtr(new GetSimulationType<descriptors[index - 1]>::type());
         }
     };
+
+    template <>
+    struct IterateDescriptors<0>
+    {
+        IterateDescriptors() {};
+    };
+
+    IterateDescriptors<template_combination_number> constexrp_iterator;
 
 } // namespace fluid
 
