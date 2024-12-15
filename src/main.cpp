@@ -7,19 +7,19 @@
 #include "simulation.hpp"
 #include "simulation_processing.hpp"
 #include "read_simulation.hpp"
+#include "parse_options.hpp"
 
 using namespace fluid;
 using namespace std;
 
 int main(int argc, char* argv[]) 
 {
-    (void)argc;
-    (void)argv;
-    TypeDescriptor td{TypeFlag::Fixed_F, 32, 16};
+    
+    Options opts = parse_options(argc, argv);
 
-    Reader r("./data/1.in");
+    Reader r(opts.filename);
 
-    SimulationPtr p = r.get_simulation(td, td, td);
+    SimulationPtr p = r.get_simulation(opts.p, opts.v, opts.vf);
 
     p->run(cout);
 }

@@ -81,7 +81,7 @@ namespace fluid
     : 
         N(GetSizes<SizeArgs...>::n), M(GetSizes<SizeArgs...>::m),
         field_(N, M), p_(N, M), old_p_(N, M), last_use_(N, M), dirs_(N, M), velocity_(N, M), velocity_flow_(N, M)
-    { 
+    {
         g_ = 0.1;
         rho_[' '] = 0.01;
         rho_['.'] = 1000; 

@@ -63,7 +63,6 @@ namespace fluid
         void allocate();
         void deallocate();
 
-
         T** data;
 
         size_t n;
