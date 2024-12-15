@@ -188,7 +188,7 @@ namespace fluid
                 }
 
             // Make flow from velocities
-            // velocity_flow_ = {};
+            velocity_flow_.v.reset();
             bool prop = false;
             do 
             {

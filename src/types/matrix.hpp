@@ -32,13 +32,13 @@ namespace fluid
         size_t get_n() const override;
         size_t get_m() const override;
 
+        void reset();
     private:
         T data[N][M];
 
         const size_t n = N;
         const size_t m = M;
 
-        void reset();
     };
 
 
@@ -57,6 +57,7 @@ namespace fluid
         size_t get_n() const override;
         size_t get_m() const override;
 
+        void reset();
     private:
         void allocate();
         void deallocate();
@@ -67,7 +68,6 @@ namespace fluid
         size_t n;
         size_t m;
 
-        void reset();
     };
 
     // Static Matrix
