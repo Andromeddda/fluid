@@ -17,6 +17,8 @@ namespace fluid
         TypeDescriptor vf;
         size_t N;
         size_t M;
+
+        bool operator==(const SimulationDescriptor& other) const = default;
     };
 
     // if N = 0 or M == 0 use Simulation with dynamic allocation
@@ -24,15 +26,17 @@ namespace fluid
     template <typename P, typename V, typename VF, size_t N, size_t M>
     struct GetSimulationTypeHelper
     {
-        using type = typename std::conditional<N != 0 && M != 0, Simulation<P, V, VF, N, M>, Simulation<P, V, VF>>::type;
+        typedef 
+            typename std::conditional<N != 0 && M != 0, Simulation<P, V, VF, N, M>, Simulation<P, V, VF>>::type
+            type;
     };
 
     template <SimulationDescriptor SD>
     struct GetSimulationType
     {
-        using P  =  typename GetType<SD.p.flag,  SD.p.N,  SD.p.M>::type;
-        using V  =  typename GetType<SD.v.flag,  SD.v.N,  SD.v.M>::type;
-        using VF =  typename GetType<SD.vf.flag, SD.vf.N, SD.vf.M>::type;
+        typedef typename GetType<SD.p.flag,  SD.p.N,  SD.p.M>::type P;
+        typedef typename GetType<SD.v.flag,  SD.v.N,  SD.v.M>::type V;
+        typedef  typename GetType<SD.vf.flag, SD.vf.N, SD.vf.M>::type VF;
 
         using type = typename GetSimulationTypeHelper<P, V, VF, SD.N, SD.M>::type;
     };
@@ -63,7 +67,11 @@ namespace fluid
     //
 
     typedef typename std::shared_ptr<AbstractSimulation>                         SimulationPtr;
-    typedef typename std::function<SimulationPtr()>                              SimulationProducer;
+    // typedef typename std::function<SimulationPtr()>                              SimulationProducer;
+
+    // typedef SimulationPtr(*)()                                                   SimulationProducer;
+
+    using SimulationProducer = SimulationPtr(*)();
     typedef typename std::array<SimulationProducer, template_combination_number> ProducerArray;
 
     ProducerArray producers;
@@ -71,11 +79,13 @@ namespace fluid
     template <size_t index>
     struct IterateDescriptors
     {
-        static IterateDescriptors<index - 1> previous;
+        IterateDescriptors<index - 1> previous;
 
         IterateDescriptors() 
         { 
-            producers[index - 1] = SimulationProducer(IterateDescriptors::producer);
+            // producers[index - 1] = SimulationProducer(producer);
+            // std::cout << "IterateDescriptors<" << index << ">()\n";
+            producers[index - 1] = producer;
         }
 
         static SimulationPtr producer()  
@@ -90,7 +100,29 @@ namespace fluid
         IterateDescriptors() {};
     };
 
-    IterateDescriptors<template_combination_number> constexrp_iterator;
+    [[maybe_unused]] IterateDescriptors<template_combination_number> constexrp_iterator;
+
+
+    // if sizes in descriptor do not match any size provided to compiler, set them to 0
+    void make_descriptor_constexpr_compatible(SimulationDescriptor& d)
+    {
+        for (auto& [n, m] : sizes)
+            if (d.N == n && d.M == m) // if match -> do nothing
+                return;
+        d.N = 0;
+        d.M = 0;
+    }
+
+    SimulationProducer get_producer(SimulationDescriptor d)
+    {
+        make_descriptor_constexpr_compatible(d);
+
+        for (size_t i = 0; i < descriptors.size(); i++)
+            if (descriptors[i] == d)
+                return producers[i];
+
+        throw std::runtime_error("Provided types do not match any availible types. Change compile options or choose another data\n.");
+    }
 
 } // namespace fluid
 

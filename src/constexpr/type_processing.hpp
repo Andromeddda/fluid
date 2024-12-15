@@ -19,6 +19,8 @@ namespace fluid
     {
         TypeFlag flag;
         size_t N, M;
+
+        bool operator==(const TypeDescriptor& other) const = default;
     };
 
     #define S(N, M)             std::pair<size_t, size_t>{N, M}

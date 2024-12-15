@@ -3,8 +3,7 @@
 
 #include <utility>
 #include <array>
-#include <ostream>
-#include <istream>
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <exception>
@@ -28,7 +27,7 @@ namespace fluid
         Reader(const std::string& filename);
         Reader(const char *filename);
 
-        SimulationPtr get_simulation();
+        SimulationPtr get_simulation(TypeDescriptor p, TypeDescriptor v, TypeDescriptor vf);
     private:
         std::string filename_;
     };
@@ -43,17 +42,35 @@ namespace fluid
         {}
 
 
-    // SimulationPtr Reader::get_simulation(TypeDescriptor p, TypeDescriptor v, TypeDescriptor vf)
-    // {
-    //     // open file
-    //     std::istream is(filename_);
+    SimulationPtr Reader::get_simulation(TypeDescriptor p, TypeDescriptor v, TypeDescriptor vf)
+    {
+        SimulationPtr result;
 
-    //     // read field shape
-    //     size_t N, M;
-    //     is >> N >> M;
+        // open file
+        std::ifstream is(filename_);
 
-    //     SimulationDescriptor sd{p, v, vf, std::make_pair(N, M)};
-    // }
+        // read field shape
+        size_t N, M;
+        is >> N >> M;
+
+        // construct simulation
+        SimulationDescriptor sd{p, v, vf, N, M};
+        auto producer = get_producer(sd);
+        result = producer();
+
+        // read ASCII art of field
+        std::string line;
+        std::getline(is, line);
+        for (auto i = 0LU; i < N; i++) 
+        {
+            std::getline(is, line);
+
+            for (auto j = 0LU; j < M; j++)
+                result->set_field(i, j, line[j]);
+        }
+
+        return result;
+    }
 } // namespace fluid
 
 #endif // HEADER_GUARD_READ_SIMULATION_HPP

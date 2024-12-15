@@ -37,6 +37,8 @@ namespace fluid
 
         const size_t n = N;
         const size_t m = M;
+
+        void reset();
     };
 
 
@@ -64,6 +66,8 @@ namespace fluid
 
         size_t n;
         size_t m;
+
+        void reset();
     };
 
     // Static Matrix
@@ -77,7 +81,7 @@ namespace fluid
     template <typename T, size_t N, size_t M>
     StaticMatrix<T, N, M>& StaticMatrix<T, N, M>::operator= (const StaticMatrix<T, N, M>& other)
     {
-        if (*this != &other)
+        if (this != &other)
             std::memcpy(this->data, other.data, sizeof(data));
         return *this;
     }
@@ -87,6 +91,15 @@ namespace fluid
     {
         assert(index < N);
         return data[index];
+    }
+
+
+    template <typename T, size_t N, size_t M>
+    void StaticMatrix<T, N, M>::reset()
+    {
+        for (auto i = 0LU; i < n; i++)
+            for (auto j = 0LU; j < m; j++)
+                data[i][j] = T{};
     }
 
     template <typename T, size_t N, size_t M>
@@ -106,6 +119,7 @@ namespace fluid
         : n(n), m(m)
     {
         allocate();
+        reset();
     }
 
     template <typename T>
@@ -123,6 +137,15 @@ namespace fluid
         data = new T*[n];
         for (auto i = 0LU; i < n; i++)
             data[i] = new T[m];
+    }
+
+
+    template <typename T>
+    void DynamicMatrix<T>::reset()
+    {
+        for (auto i = 0LU; i < n; i++)
+            for (auto j = 0LU; j < m; j++)
+                data[i][j] = T{};
     }
 
     template <typename T>
@@ -161,6 +184,7 @@ namespace fluid
 
         for (auto i = 0LU; i < n; i++)
             std::memcpy(data[i], other.data[i], sizeof(T) * m);
+        return *this;
     }
 
     template <typename T>

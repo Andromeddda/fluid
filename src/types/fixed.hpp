@@ -31,12 +31,12 @@ namespace fluid
     };
 
 
-    template<size_t N, size_t K, bool Fast = false>
+    template<size_t N, size_t K, bool Fast>
     struct Fixed
     {
         // choose between int_t and fast_int_t
         using type = 
-            typename std::conditional<Fast, typename fast_int_t<N>::type, typename int_t<N>::type >::type;
+            typename std::conditional<Fast, typename fast_int_t<N>::type, typename int_t<N>::type>::type;
 
         type v;
 
@@ -54,7 +54,7 @@ namespace fluid
         template <size_t N2, size_t K2>
         Fixed& operator= (const Fixed<N2, K2, Fast>& other);
 
-        static constexpr Fixed from_raw(int x);
+        static constexpr Fixed from_raw(int64_t x);
 
         auto operator<=>(const Fixed&) const = default;
         bool operator==(const Fixed&) const = default;
@@ -86,7 +86,7 @@ namespace fluid
     // static construct from raw int 
 
     template<size_t N, size_t K, bool Fast>
-    constexpr Fixed<N, K, Fast> Fixed<N, K, Fast>::from_raw(int x)
+    constexpr Fixed<N, K, Fast> Fixed<N, K, Fast>::from_raw(int64_t x)
     {
         Fixed<N, K, Fast> ret;
         ret.v = x;
@@ -110,13 +110,13 @@ namespace fluid
     template <size_t N, size_t K, bool Fast, typename T>
     Fixed<N, K, Fast> operator*(Fixed<N, K, Fast> a, T b) 
     {
-        return Fixed<N, K, Fast>::from_raw(((int64_t) a.v * Fixed<N, K, Fast>(b).v) >> 16);
+        return Fixed<N, K, Fast>::from_raw(((int64_t) a.v * Fixed<N, K, Fast>(b).v) >> K);
     }
 
     template <size_t N, size_t K, bool Fast, typename T>
     Fixed<N, K, Fast> operator/ (Fixed<N, K, Fast> a, T b) 
     {
-        return Fixed<N, K, Fast>::from_raw(((int64_t) a.v << 16) / Fixed<N, K, Fast>(b).v);
+        return Fixed<N, K, Fast>::from_raw(((int64_t) a.v << K) / Fixed<N, K, Fast>(b).v);
     }
 
     template <size_t N, size_t K, bool Fast, typename T>
@@ -168,7 +168,7 @@ namespace fluid
     template <size_t N, size_t K, bool Fast>
     std::ostream &operator<<(std::ostream &out, Fixed<N, K, Fast> x) 
     {
-        return out << x.v / (double) (1 << 16);
+        return out << x.v / (double) (1 << K);
     }
 } // namespace fluid
 
