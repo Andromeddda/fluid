@@ -1,7 +1,6 @@
 #ifndef HEADER_GUARD_FIXED_FIXED_HPP
 #define HEADER_GUARD_FIXED_FIXED_HPP
 
-#include <bits/stdc++.h>
 #include <ostream>
 #include <cstdint>
 #include <type_traits>

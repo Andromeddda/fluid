@@ -7,7 +7,9 @@
 #include <ostream>
 #include <assert.h>
 #include <memory>
-#include <bits/stdc++.h>
+#include <ranges>
+#include <iterator>
+#include <algorithm>
 
 #include "vector_field.hpp"
 #include "particle_params.hpp"

@@ -7,7 +7,6 @@
 #include <ostream>
 #include <utility>
 #include <array>
-#include <bits/stdc++.h>
 
 #include "deltas.hpp"
 #include "matrix_processing.hpp"

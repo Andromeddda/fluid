@@ -1,6 +1,7 @@
 #ifndef HEADER_GUARD_PARTICLE_PARAMS_HPP
 #define HEADER_GUARD_PARTICLE_PARAMS_HPP
 
+#include <array>
 
 namespace fluid
 {
