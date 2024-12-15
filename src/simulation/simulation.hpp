@@ -27,8 +27,6 @@ namespace fluid
         AbstractSimulation() {};
         virtual ~AbstractSimulation() {};
 
-        // virtual AbstractSimulation& operator= (const AbstractSimulation& other) { return *this; };
-
         virtual void run(std::ostream& os) = 0;
 
         virtual void set_field(size_t i, size_t j, char c) = 0;
@@ -79,7 +77,6 @@ namespace fluid
         bool    propagate_move(int x, int y, bool is_first);
         void    propagate_stop(int x, int y, bool force = false);
         std::tuple<V, bool, std::pair<int, int>> propagate_flow(int x, int y, V lim);
-        // P       random01();
 
     }; // class Simulation
 
@@ -94,8 +91,6 @@ namespace fluid
         rho_[' '] = 0.01;
         rho_['.'] = 1000; 
     }
-
-
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
     Simulation<P, V, VF, SizeArgs...>::Simulation(size_t n, size_t m)

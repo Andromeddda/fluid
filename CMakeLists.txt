@@ -21,8 +21,6 @@ endif()
 
 if (DEFINED SIZES)
     add_compile_definitions("SIZES=${SIZES}")
-else()
-    message(FATAL_ERROR "SIZES compile option is required")
 endif()
 
 

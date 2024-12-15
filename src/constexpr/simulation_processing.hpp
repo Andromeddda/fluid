@@ -36,7 +36,7 @@ namespace fluid
     {
         typedef typename GetType<SD.p.flag,  SD.p.N,  SD.p.M>::type P;
         typedef typename GetType<SD.v.flag,  SD.v.N,  SD.v.M>::type V;
-        typedef  typename GetType<SD.vf.flag, SD.vf.N, SD.vf.M>::type VF;
+        typedef typename GetType<SD.vf.flag, SD.vf.N, SD.vf.M>::type VF;
 
         using type = typename GetSimulationTypeHelper<P, V, VF, SD.N, SD.M>::type;
     };

@@ -52,9 +52,6 @@ namespace fluid
         static const size_t n = N, m = M;
     };
 
-
-
-
 } // namespace fluid
 
 

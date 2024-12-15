@@ -30,7 +30,7 @@ namespace fluid
     #define DOUBLE              fluid::TypeDescriptor{fluid::TypeFlag::Double_F,      0, 0}
 
     #ifndef SIZES
-        #error "sizes are not defined"    
+        #define SIZES    
     #endif
 
     #ifndef TYPES
@@ -45,6 +45,8 @@ namespace fluid
     #undef FAST_FIXED
     #undef FLOAT
     #undef DOUBLE
+    #undef SIZES
+    #undef TYPES
 
     template <TypeFlag Flag, size_t N, size_t M>
     struct GetType;
