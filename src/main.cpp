@@ -16,7 +16,7 @@ int main(int argc, char* argv[])
 
     Reader r(opts.filename);
 
-    SimulationPtr p = r.get_simulation(opts.p, opts.v, opts.vf);
+    SimulationPtr p = r.get_simulation(opts.p, opts.v, opts.vf, opts.n_threads);
 
     p->run(cout, opts.save_filename);
 }

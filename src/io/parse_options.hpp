@@ -27,8 +27,10 @@ namespace fluid
         TypeDescriptor vf;
         std::string filename;
         std::string save_filename;
+        size_t n_threads;
     };
 
+    static const char j_option[]  = "-j";
     static const char p_option[]  = "--p-type=";
     static const char v_option[]  = "--v-type=";
     static const char vf_option[] = "--vf-type=";
@@ -39,12 +41,13 @@ namespace fluid
     Options parse_options(int argc, char* argv[])
     {
         Options result;
+        result.n_threads = 1;
 
-        if (argc != 6)
+        if (argc < 6)
         {
             std::cout << "Incorrect amount of arguments provided.\n";
             std::cout << "Usage:\n";
-            std::cout << "./build/fluid --p-type=... --v-type=... --vf-type=... <filename> --save-to=...\n";
+            std::cout << "./build/fluid --p-type=... --v-type=... --vf-type=... <filename> --save-to=... [-jN]\n";
             exit(-1);
         }
 
@@ -71,6 +74,12 @@ namespace fluid
             if (std::strncmp(argv[i], save_to, 10) == 0)
             {
                 result.save_filename = std::string(argv[i] + 10);
+                continue;
+            }
+
+            if (std::strncmp(argv[i], j_option, 2) == 0)
+            {
+                result.n_threads = std::atoll(argv[i] + 2);
                 continue;
             }
 

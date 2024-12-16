@@ -1,6 +1,6 @@
 # fluid
 
-Second homework for HSE SE C++ course, 2nd year.
+Second homework for HSE SE C++ course, 3nd year.
 
 ## Requirements
 
@@ -33,7 +33,7 @@ cmake --build build --target fluid -j 4
 ## Launching
 * The order of command line options is arbitrary
 ```
-./build/fluid --p-type='...' --v-type='...' --vf-type='...' filename --save-to=file
+./build/fluid --p-type='...' --v-type='...' --vf-type='...' filename --save-to=file -jN
 ```
 * The project also has two bash scripts that build and launch prepared examples
 ```
