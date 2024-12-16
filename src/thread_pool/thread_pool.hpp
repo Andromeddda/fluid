@@ -18,11 +18,14 @@ namespace fluid
     class ThreadPool
     {
     public:
+        ThreadPool();
         ThreadPool(size_t num_threads);
 
         template <typename Func, typename ...Args>
             // requires (std::invocable<Func>)
         size_t add_task(const Func& func, Args&&... args);
+
+        void init(size_t num_threads);
 
         void wait(size_t task_id);
 
@@ -59,7 +62,7 @@ namespace fluid
 
         std::lock_guard<std::mutex> queue_guard(queue_mutex);
 
-        task_queue.emplace(make_pair(std::async(std::launch::deferred, func, args...), task_id));
+        task_queue.emplace(std::make_pair(std::async(std::launch::deferred, func, args...), task_id));
 
         queue_condvar.notify_one(); // wake one waiting worker
 

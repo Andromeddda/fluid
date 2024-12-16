@@ -2,7 +2,16 @@
 
 namespace fluid
 {
+
+    ThreadPool::ThreadPool() { }
+
+
     ThreadPool::ThreadPool(size_t num_threads)
+    {
+        init(num_threads);
+    }
+
+    void ThreadPool::init(size_t num_threads)
     {
         for (auto i = 0LU; i < num_threads; i++)
             threads.push_back(std::thread(&ThreadPool::run, this));
