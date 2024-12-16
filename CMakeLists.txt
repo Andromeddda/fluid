@@ -10,6 +10,7 @@ set(CMAKE_CXX_FLAGS_RELEASE "-Werror -Wall -Wextra -std=gnu++20 -g0 -O2")
 
 set(SOURCES
     src/main.cpp
+    src/thread_pool/thread_pool.cpp
         )
 
 if (DEFINED TYPES)
@@ -32,4 +33,5 @@ target_include_directories(${CMAKE_PROJECT_NAME}
     src/constexpr/
     src/simulation/
     src/io/
-    src/types/)
+    src/types/
+    src/thread_pool/)

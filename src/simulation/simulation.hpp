@@ -80,11 +80,11 @@ namespace fluid
         void    tick(std::ostream& os, size_t tick_n);
         void    cycle(std::ostream& os, size_t& tick_n);
 
-        void apply_gravity();
-        void apply_forces_from_p();
-        void make_flow_from_velocities();
-        void recalculate_p();
-        bool process_particles();
+        void    apply_gravity();
+        void    apply_forces_from_p();
+        void    make_flow_from_velocities();
+        void    recalculate_p();
+        bool    process_particles();
 
         void print_state(std::ostream& os, size_t tick_n);
 
