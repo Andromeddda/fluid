@@ -50,6 +50,7 @@ namespace fluid
     public:
         Simulation();
         Simulation(size_t n, size_t m);
+        Simulation(size_t n, size_t m, size_t n_threads);
 
         Simulation& operator= (const Simulation& other) = default;
 
@@ -60,6 +61,10 @@ namespace fluid
         friend class ParticleParams<P, V>;
 
         size_t N, M;
+        size_t n_threads;
+
+        std::vector<size_t> chunk_borders;
+
         MatrixType<char, SizeArgs...>::type field_;
 
         P   g_;
@@ -77,7 +82,10 @@ namespace fluid
         int UT = 0;
         std::atomic<bool> save_{false};
 
-        void    tick(std::ostream& os, size_t tick_n);
+        void    init_chunk_borders();
+        void    init_dirs();
+
+        bool    tick();
         void    cycle(std::ostream& os, size_t& tick_n);
 
         void    apply_gravity();
@@ -86,7 +94,7 @@ namespace fluid
         void    recalculate_p();
         bool    process_particles();
 
-        void print_state(std::ostream& os, size_t tick_n);
+        void    print_state(std::ostream& os, size_t tick_n);
 
         V       move_prob(int x, int y);
         bool    propagate_move(int x, int y, bool is_first);
@@ -95,8 +103,6 @@ namespace fluid
 
 
         void    save(const std::string& save_to);
-
-
     }; // class Simulation
 
 
@@ -113,14 +119,56 @@ namespace fluid
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
     Simulation<P, V, VF, SizeArgs...>::Simulation(size_t n, size_t m)
-    : N(n), M(m), field_(n, m), p_(n, m), old_p_(n, m), last_use_(n, m), dirs_(n, m), velocity_(n, m), velocity_flow_(n, m)
+    : N(n), M(m), n_threads(1), field_(n, m), p_(n, m), old_p_(n, m), last_use_(n, m), dirs_(n, m), velocity_(n, m), velocity_flow_(n, m)
     {
         assert(SizesMatch<SizeArgs...>(n, m));
         g_ = 0.1;
         rho_[' '] = 0.01;
-        rho_['.'] = 1000; 
+        rho_['.'] = 1000;
+
+        init_chunk_borders();
     }
 
+
+    template <typename P, typename V, typename VF, size_t... SizeArgs>
+    Simulation<P, V, VF, SizeArgs...>::Simulation(size_t n, size_t m, size_t n_threads)
+    : N(n), M(m), n_threads(n_threads), field_(n, m), p_(n, m), old_p_(n, m), last_use_(n, m), dirs_(n, m), velocity_(n, m), velocity_flow_(n, m)
+    {
+        assert(SizesMatch<SizeArgs...>(n, m));
+        assert(n_threads < M);
+
+        g_ = 0.1;
+        rho_[' '] = 0.01;
+        rho_['.'] = 1000;
+
+        init_chunk_borders();
+    }
+
+    template <typename P, typename V, typename VF, size_t... SizeArgs>
+    void Simulation<P, V, VF, SizeArgs...>::init_chunk_borders()
+    {
+        chunk_borders = std::vector<size_t>(n_threads + 1);
+        size_t chunk_size = (M + n_threads) / n_threads;
+
+        for (auto i = 0LU; i < n_threads; i++)
+            chunk_borders[i] = i*chunk_size;
+        chunk_borders[n_threads] = M;
+    }
+
+    template <typename P, typename V, typename VF, size_t... SizeArgs>
+    void Simulation<P, V, VF, SizeArgs...>::init_dirs()
+    {
+        for (size_t x = 0; x < N; ++x) 
+        {
+            for (size_t y = 0; y < M; ++y) 
+            {
+                if (field_[x][y] == '#')
+                    continue;
+                for (auto [dx, dy] : deltas) 
+                    dirs_[x][y] += (field_[x + dx][y + dy] != '#');
+            }
+        }
+    }
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
     void Simulation<P, V, VF, SizeArgs...>::set_field(size_t i, size_t j, char c) 
@@ -287,7 +335,7 @@ namespace fluid
     }
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
-    void Simulation<P, V, VF, SizeArgs...>::tick(std::ostream& os, size_t tick_n)
+    bool Simulation<P, V, VF, SizeArgs...>::tick()
     {
         apply_gravity();
         apply_forces_from_p();
@@ -296,9 +344,7 @@ namespace fluid
 
         UT += 2;
         
-        bool prop = process_particles();
-        if (prop) 
-            print_state(os, tick_n);
+        return process_particles();
     }
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
@@ -306,8 +352,9 @@ namespace fluid
     {
         for (; tick_n < T; ++tick_n)
         {
-            tick(os, tick_n);
-            std::this_thread::yield();
+            if(tick())
+                print_state(os, tick_n);
+
             if (save_.load())
                 return;
         }
@@ -338,32 +385,13 @@ namespace fluid
     template <typename P, typename V, typename VF, size_t... SizeArgs>
     void Simulation<P, V, VF, SizeArgs...>::run(std::ostream& os, const std::string& save_to)
     {
-        // initialize dirs
-        for (size_t x = 0; x < N; ++x) 
-        {
-            for (size_t y = 0; y < M; ++y) 
-            {
-                if (field_[x][y] == '#')
-                    continue;
-                for (auto [dx, dy] : deltas) 
-                    dirs_[x][y] += (field_[x + dx][y + dy] != '#');
-            }
-        }
+        init_dirs();
 
-        size_t i = 0;
+        size_t tick = 0;
 
-        // run the cycle in another thread
-        std::thread thrd(&Simulation<P, V, VF, SizeArgs...>::cycle, this, std::ref(os), std::ref(i));
+        cycle(os, tick);
 
-        // expect '\n'
-        int c;
-        while ((c = getchar() != 10)) {}
-
-        save_.store(true);
-        thrd.join();
-
-        std::cout << "saving to file " << save_to << '\n';
-        save(save_to);
+        (void)save_to;
     } // Simulation::run
 
 

@@ -63,6 +63,9 @@ namespace fluid
             };
 
         completed_tasks_condvar.wait(lock, wait_predicate);
+
+        completed_tasks.clear();
+        next_id.store(0);
     }
 
     bool ThreadPool::is_completed(size_t task_id)
