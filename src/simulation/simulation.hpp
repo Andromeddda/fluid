@@ -87,14 +87,16 @@ namespace fluid
 
         bool    tick();
         void    cycle(std::ostream& os, size_t& tick_n);
-
-        void    apply_gravity();
-        void    apply_forces_from_p();
-        void    make_flow_from_velocities();
-        void    recalculate_p();
-        bool    process_particles();
-
         void    print_state(std::ostream& os, size_t tick_n);
+
+
+        // thread personal methods
+        void    apply_gravity(size_t chunk = 0);
+        void    apply_forces_from_p(size_t chunk = 0);
+        void    make_flow_from_velocities(size_t chunk = 0);
+        void    recalculate_p(size_t chunk = 0);
+        bool    process_particles(size_t chunk = 0);
+
 
         V       move_prob(int x, int y);
         bool    propagate_move(int x, int y, bool is_first);
@@ -178,11 +180,11 @@ namespace fluid
 
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
-    void Simulation<P, V, VF, SizeArgs...>::apply_gravity()
+    void Simulation<P, V, VF, SizeArgs...>::apply_gravity(size_t chunk)
     {
         for (size_t x = 0; x < N; ++x) 
         {
-            for (size_t y = 0; y < M; ++y) 
+            for (size_t y = chunk_borders[chunk]; y < chunk_borders[chunk + 1]; ++y) 
             {
                 if (field_[x][y] == '#')
                     continue;
@@ -193,12 +195,12 @@ namespace fluid
     }
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
-    void Simulation<P, V, VF, SizeArgs...>::apply_forces_from_p()
+    void Simulation<P, V, VF, SizeArgs...>::apply_forces_from_p(size_t chunk)
     {
         old_p_ = p_;
         for (size_t x = 0; x < N; ++x) 
         {
-            for (size_t y = 0; y < M; ++y) 
+            for (size_t y = chunk_borders[chunk]; y < chunk_borders[chunk + 1]; ++y) 
             {
                 if (field_[x][y] == '#')
                     continue;
@@ -214,15 +216,19 @@ namespace fluid
                         continue;
 
                     auto force = old_p_[x][y] - old_p_[nx][ny];
+                    // TODO: mutex
                     auto &contr = velocity_.get(nx, ny, -dx, -dy);
 
                     if (contr * rho_[(int) field_[nx][ny]] >= force) 
                     {
+                        // TODO: mutex
                         contr -= force / rho_[(int) field_[nx][ny]];
                         continue;
                     }
 
                     force -= contr * rho_[(int) field_[nx][ny]];
+
+                    // TODO: mutex
                     contr = 0;
                     velocity_.add(x, y, dx, dy, force / rho_[(int) field_[x][y]]);
                     p_[x][y] -= force / dirs_[x][y];
@@ -232,7 +238,7 @@ namespace fluid
     }
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
-    void Simulation<P, V, VF, SizeArgs...>::make_flow_from_velocities()
+    void Simulation<P, V, VF, SizeArgs...>::make_flow_from_velocities(size_t chunk)
     {
         velocity_flow_.v.reset();
         bool prop = false;
@@ -242,7 +248,7 @@ namespace fluid
             prop = false;
             for (size_t x = 0; x < N; ++x)
             {
-                for (size_t y = 0; y < M; ++y) 
+                for (size_t y = chunk_borders[chunk]; y < chunk_borders[chunk + 1]; ++y) 
                 {
                     if (field_[x][y] == '#')
                         continue; // skip walls
@@ -259,12 +265,12 @@ namespace fluid
     }
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
-    void Simulation<P, V, VF, SizeArgs...>::recalculate_p()
+    void Simulation<P, V, VF, SizeArgs...>::recalculate_p(size_t chunk)
     {
         // Recalculate p_ with kinetic energy
         for (size_t x = 0; x < N; ++x) 
         {
-            for (size_t y = 0; y < M; ++y) 
+            for (size_t y = chunk_borders[chunk]; y < chunk_borders[chunk + 1]; ++y) 
             {
                 if (field_[x][y] == '#')
                     continue;
@@ -290,7 +296,8 @@ namespace fluid
 
                     if (field_[x + dx][y + dy] == '#') 
                         p_[x][y] += force / dirs_[x][y];
-                    else 
+                    else
+                        // TODO: mutex
                         p_[x + dx][y + dy] += force / dirs_[x + dx][y + dy];
                 }
             }
@@ -298,12 +305,12 @@ namespace fluid
     }
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
-    bool Simulation<P, V, VF, SizeArgs...>::process_particles()
+    bool Simulation<P, V, VF, SizeArgs...>::process_particles(size_t chunk)
     {
         bool prop = false;
         for (size_t x = 0; x < N; ++x) 
         {
-            for (size_t y = 0; y < M; ++y) 
+            for (size_t y = chunk_borders[chunk]; y < chunk_borders[chunk + 1]; ++y) 
             {
                 if (field_[x][y] != '#' && last_use_[x][y] != UT) 
                 {
@@ -385,6 +392,7 @@ namespace fluid
     template <typename P, typename V, typename VF, size_t... SizeArgs>
     void Simulation<P, V, VF, SizeArgs...>::run(std::ostream& os, const std::string& save_to)
     {
+        os << "running with " << n_threads << " threads\n";
         init_dirs();
 
         size_t tick = 0;
@@ -398,6 +406,8 @@ namespace fluid
     template <typename P, typename V, typename VF, size_t... SizeArgs>
     std::tuple<V, std::optional<std::pair<int, int>>> Simulation<P, V, VF, SizeArgs...>::propagate_flow(int x, int y, V lim) 
     {
+        // TODO: chunk borders
+
         last_use_[x][y] = UT - 1;
         VF ret = 0;
 
@@ -427,6 +437,7 @@ namespace fluid
                 return {vp, std::optional<std::pair<int, int>>{std::make_pair(nx, ny)}};
             }
 
+            // TODO: synchronize
             auto [t, end] = propagate_flow(nx, ny, vp);
             ret += t;
             if (end.has_value()) 
@@ -448,6 +459,8 @@ namespace fluid
     template <typename P, typename V, typename VF, size_t... SizeArgs>
     bool Simulation<P, V, VF, SizeArgs...>::propagate_move(int x, int y, bool is_first) 
     {
+
+        // TODO: chunk borders
         last_use_[x][y] = UT - is_first;
         bool ret = false;
         int nx = -1, ny = -1;
@@ -484,8 +497,12 @@ namespace fluid
             auto [dx, dy] = deltas[d];
             nx = x + dx;
             ny = y + dy;
-            assert(velocity_.get(x, y, dx, dy) > 0 && field_[nx][ny] != '#' && last_use_[nx][ny] < UT);
 
+            assert(velocity_.get(x, y, dx, dy) > 0);
+            assert(field_[nx][ny] != '#');
+            assert(last_use_[nx][ny] < UT);
+
+            // TODO: synchronize
             ret = (last_use_[nx][ny] == UT - 1 || propagate_move(nx, ny, false));
         } while (!ret);
 
@@ -495,13 +512,24 @@ namespace fluid
         {
             auto [dx, dy] = deltas[i];
             int nx = x + dx, ny = y + dy;
-            if (field_[nx][ny] != '#' && last_use_[nx][ny] < UT - 1 && velocity_.get(x, y, dx, dy) < 0)
-                propagate_stop(nx, ny);
+
+            if (field_[nx][ny] == '#')
+                continue; // skip walls
+
+            if (last_use_[nx][ny] >= UT - 1)
+                continue;
+
+            if (velocity_.get(x, y, dx, dy) >= 0)
+                continue;
+
+            // TODO: synchonize
+            propagate_stop(nx, ny);
         }
 
         if (ret)
             if (!is_first) 
             {
+                // TODO: synchronize
                 ParticleParams<P, V> pp{};
                 pp.swap_with(*this, x, y);
                 pp.swap_with(*this, nx, ny);
@@ -558,6 +586,7 @@ namespace fluid
             if (velocity_.get(x, y, dx, dy) > 0)
                 continue; // skip particles that are in our way
 
+            // TODO: synchronize
             propagate_stop(nx, ny); // stop the particle
         }
     } // Simulation::propagate_stop
@@ -569,7 +598,10 @@ namespace fluid
         for (auto [dx, dy] : deltas) 
         {
             int nx = x + dx, ny = y + dy;
-            if (field_[nx][ny] == '#' || last_use_[nx][ny] == UT)
+            if (field_[nx][ny] == '#')
+                continue; // skip walls
+
+            if (last_use_[nx][ny] == UT)
                 continue;
 
             auto v = velocity_.get(x, y, dx, dy);
