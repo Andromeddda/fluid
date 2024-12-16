@@ -91,6 +91,17 @@ namespace fluid
             v = other.v >> (K2 - K1);
     }
 
+    template <size_t N1, size_t K1, bool Fast>
+    template <size_t N2, size_t K2, bool Fast2>
+    Fixed<N1, K1, Fast>& Fixed<N1, K1, Fast>::operator= (const Fixed<N2, K2, Fast2>& other)
+    {
+        if constexpr (K1 >= K2)
+            v = other.v << (K1 - K2);
+        else    
+            v = other.v >> (K2 - K1);
+        return *this;
+    }
+
     // static construct from raw int 
 
     template<size_t N, size_t K, bool Fast>

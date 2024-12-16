@@ -21,7 +21,7 @@ namespace fluid
         ThreadPool(size_t num_threads);
 
         template <typename Func, typename ...Args>
-            requires (std::invocable<Func>)
+            // requires (std::invocable<Func>)
         size_t add_task(const Func& func, Args&&... args);
 
         void wait(size_t task_id);
@@ -52,7 +52,7 @@ namespace fluid
     };
 
     template <typename Func, typename ...Args>
-        requires (std::invocable<Func>)
+        // requires (std::invocable<Func>)
     size_t ThreadPool::add_task(const Func& func, Args&&... args)
     {
         size_t task_id = next_id++;

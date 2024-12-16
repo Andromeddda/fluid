@@ -24,6 +24,8 @@
 
 #include "thread_pool.hpp"
 
+#define CHUNK_ANY ((size_t)-1)
+
 namespace fluid
 {
     constexpr size_t T = 1'000'000;
@@ -86,7 +88,14 @@ namespace fluid
         int UT = 0;
         std::atomic<bool> save_{false};
 
-        size_t  get_chunk_by_coord(size_t y);
+        std::mutex      p_mtx, old_mtx, v_mtx, vf_mtx, lu_mtx;
+
+        // if n_threads > 1 perform lock/unlock
+        // otherwise do nothing
+        void    guard(std::mutex& mtx);
+        void    release(std::mutex& mtx);
+
+        bool    own_chunk(size_t chunk, size_t y);
 
         void    init_chunk_borders();
         void    init_dirs();
@@ -102,11 +111,10 @@ namespace fluid
         void    recalculate_p(size_t chunk = 0);
         bool    process_particles(size_t chunk = 0);
 
-
         V       move_prob(int x, int y);
         bool    propagate_move(int x, int y, bool is_first);
         void    propagate_stop(int x, int y, bool force = false);
-        std::tuple<V, std::optional<std::pair<int, int>>> propagate_flow(int x, int y, V lim);
+        void    propagate_flow(size_t chunk, int x, int y, V lim, std::pair<V, std::optional<std::pair<int, int>>>& ret);
 
 
         void    save(const std::string& save_to);
@@ -164,10 +172,26 @@ namespace fluid
 
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
-    size_t Simulation<P, V, VF, SizeArgs...>::get_chunk_by_coord(size_t y)
+    void Simulation<P, V, VF, SizeArgs...>::guard(std::mutex& mtx)
     {
-        size_t chunk_size = (M + n_threads) / n_threads;
-        return y / chunk_size;
+        if (n_threads > 1)
+            mtx.lock();
+    }
+
+    template <typename P, typename V, typename VF, size_t... SizeArgs>
+    bool Simulation<P, V, VF, SizeArgs...>::own_chunk(size_t chunk, size_t y)
+    {
+        if (chunk == CHUNK_ANY)
+            return true;
+
+        return (y >= chunk_borders[chunk]) && (y < chunk_borders[chunk + 1]);
+    }
+
+    template <typename P, typename V, typename VF, size_t... SizeArgs>
+    void Simulation<P, V, VF, SizeArgs...>::release(std::mutex& mtx)
+    {
+        if (n_threads > 1)
+            mtx.lock();
     }
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
@@ -228,20 +252,26 @@ namespace fluid
                         continue;
 
                     auto force = old_p_[x][y] - old_p_[nx][ny];
-                    // TODO: mutex
+
+                    guard(v_mtx);
                     auto &contr = velocity_.get(nx, ny, -dx, -dy);
+                    release(v_mtx);
 
                     if (contr * rho_[(int) field_[nx][ny]] >= force) 
                     {
-                        // TODO: mutex
+                        guard(v_mtx);
                         contr -= force / rho_[(int) field_[nx][ny]];
+                        release(v_mtx);
                         continue;
                     }
 
                     force -= contr * rho_[(int) field_[nx][ny]];
 
-                    // TODO: mutex
+                    guard(v_mtx);
                     contr = 0;
+                    release(v_mtx);
+
+                    // don't need lock because its our chunk
                     velocity_.add(x, y, dx, dy, force / rho_[(int) field_[x][y]]);
                     p_[x][y] -= force / dirs_[x][y];
                 }
@@ -268,7 +298,10 @@ namespace fluid
                     if (last_use_[x][y] == UT)
                         continue; // skip particles that are already processed
 
-                    auto [t, coord] = propagate_flow(x, y, 1);
+                    std::pair<V, std::optional<std::pair<int, int>>> task_res;
+
+                    propagate_flow(chunk, x, y, 1, task_res);
+                    auto t = task_res.first;
                     if (t > 0)
                         prop = true;
                 }
@@ -308,9 +341,12 @@ namespace fluid
 
                     if (field_[x + dx][y + dy] == '#') 
                         p_[x][y] += force / dirs_[x][y];
-                    else
-                        // TODO: mutex
+                    else 
+                    {
+                        guard(p_mtx);
                         p_[x + dx][y + dy] += force / dirs_[x + dx][y + dy];
+                        release(p_mtx);
+                    }
                 }
             }
         }
@@ -354,7 +390,7 @@ namespace fluid
     }
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
-    bool Simulation<P, V, VF, SizeArgs...>::tick()
+    bool Simulation<P, V, VF, SizeArgs...>::tick() // TODO: specify chunk
     {
         apply_gravity();
         apply_forces_from_p();
@@ -367,7 +403,7 @@ namespace fluid
     }
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
-    void Simulation<P, V, VF, SizeArgs...>::cycle(std::ostream& os, size_t& tick_n)
+    void Simulation<P, V, VF, SizeArgs...>::cycle(std::ostream& os, size_t& tick_n) // TODO: thread pool
     {
         for (; tick_n < T; ++tick_n)
         {
@@ -416,12 +452,13 @@ namespace fluid
 
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
-    std::tuple<V, std::optional<std::pair<int, int>>> Simulation<P, V, VF, SizeArgs...>::propagate_flow(int x, int y, V lim) 
+    void Simulation<P, V, VF, SizeArgs...>::propagate_flow(size_t chunk, int x, int y, V lim, std::pair<V, std::optional<std::pair<int, int>>>& ret) 
     {
-        // TODO: chunk borders
-
+        guard(lu_mtx);
         last_use_[x][y] = UT - 1;
-        VF ret = 0;
+        release(lu_mtx);
+
+        VF result = 0;
 
         // look at every nearby particle
         for (auto [dx, dy] : deltas) 
@@ -443,29 +480,63 @@ namespace fluid
             VF vp = std::min(lim, cap - flow);
             if (last_use_[nx][ny] == UT - 1) 
             {
+                guard(vf_mtx);
                 velocity_flow_.add(x, y, dx, dy, vp);
-                last_use_[x][y] = UT;
+                release(vf_mtx);
 
-                return {vp, std::optional<std::pair<int, int>>{std::make_pair(nx, ny)}};
+                guard(lu_mtx);
+                last_use_[x][y] = UT;
+                release(lu_mtx);
+
+                ret.first = vp;
+                ret.second = std::optional<std::pair<int, int>>{std::make_pair(nx, ny)};
+                return;
             }
 
-            // TODO: synchronize
-            auto [t, end] = propagate_flow(nx, ny, vp);
-            ret += t;
+            std::pair<V, std::optional<std::pair<int, int>>> task_res;
+
+            if (own_chunk(chunk, y))
+                propagate_flow(chunk, nx, ny, vp, task_res);
+            else
+            {
+                size_t task = pool_.add_task(&Simulation<P, V, VF, SizeArgs...>::propagate_flow, this, CHUNK_ANY, nx, ny, vp, std::ref(task_res));
+                pool_.wait(task);
+            }
+
+            auto t = task_res.first;
+            auto end = task_res.second;
+
+            result += t;
             if (end.has_value()) 
             {
                 velocity_flow_.add(x, y, dx, dy, t);
+
+                guard(lu_mtx);
                 last_use_[x][y] = UT;
+                release(lu_mtx);
 
                 if (end.value() == std::pair(x, y))
-                    return {t, std::optional<std::pair<int, int>>()};
+                {
+                    // return empty result
+                    ret.first = t;
+                    ret.second = std::optional<std::pair<int, int>>();
+                    return;
+                }
 
-                return {t, end};
+                ret.first = t;
+                ret.second = end;
+                return;
             }
         }
 
+        guard(lu_mtx);
         last_use_[x][y] = UT;
-        return {ret, std::optional<std::pair<int, int>>()};
+        release(lu_mtx);
+
+        // return empty result
+        ret.first = result;
+        ret.second = std::optional<std::pair<int, int>>();
+        return;
     } // Simulation:propagate_flow
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
