@@ -11,6 +11,7 @@
 #include <iterator>
 #include <algorithm>
 #include <fstream>
+#include <optional>
 
 #include <thread>
 #include <atomic>
@@ -90,7 +91,7 @@ namespace fluid
         V       move_prob(int x, int y);
         bool    propagate_move(int x, int y, bool is_first);
         void    propagate_stop(int x, int y, bool force = false);
-        std::tuple<V, bool, std::pair<int, int>> propagate_flow(int x, int y, V lim);
+        std::tuple<V, std::optional<std::pair<int, int>>> propagate_flow(int x, int y, V lim);
 
 
         void    save(const std::string& save_to);
@@ -201,7 +202,7 @@ namespace fluid
                     if (last_use_[x][y] == UT)
                         continue; // skip particles that are already processed
 
-                    auto [t, local_prop, _] = propagate_flow(x, y, 1);
+                    auto [t, coord] = propagate_flow(x, y, 1);
                     if (t > 0)
                         prop = true;
                 }
@@ -367,7 +368,7 @@ namespace fluid
 
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
-    std::tuple<V, bool, std::pair<int, int>> Simulation<P, V, VF, SizeArgs...>::propagate_flow(int x, int y, V lim) 
+    std::tuple<V, std::optional<std::pair<int, int>>> Simulation<P, V, VF, SizeArgs...>::propagate_flow(int x, int y, V lim) 
     {
         last_use_[x][y] = UT - 1;
         VF ret = 0;
@@ -395,22 +396,25 @@ namespace fluid
                 velocity_flow_.add(x, y, dx, dy, vp);
                 last_use_[x][y] = UT;
 
-                return {vp, true, {nx, ny}};
+                return {vp, std::optional<std::pair<int, int>>{std::make_pair(nx, ny)}};
             }
 
-            auto [t, prop, end] = propagate_flow(nx, ny, vp);
+            auto [t, end] = propagate_flow(nx, ny, vp);
             ret += t;
-            if (prop) 
+            if (end.has_value()) 
             {
                 velocity_flow_.add(x, y, dx, dy, t);
                 last_use_[x][y] = UT;
 
-                return {t, prop && end != std::pair(x, y), end};
+                if (end.value() == std::pair(x, y))
+                    return {t, std::optional<std::pair<int, int>>()};
+
+                return {t, end};
             }
         }
 
         last_use_[x][y] = UT;
-        return {ret, false, {0, 0}};
+        return {ret, std::optional<std::pair<int, int>>()};
     } // Simulation:propagate_flow
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
