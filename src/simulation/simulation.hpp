@@ -22,6 +22,8 @@
 #include "matrix.hpp"
 #include "random.hpp"
 
+#include "thread_pool.hpp"
+
 namespace fluid
 {
     constexpr size_t T = 1'000'000;
@@ -60,6 +62,8 @@ namespace fluid
     private:
         friend class ParticleParams<P, V>;
 
+        ThreadPool pool_;
+
         size_t N, M;
         size_t n_threads;
 
@@ -82,13 +86,14 @@ namespace fluid
         int UT = 0;
         std::atomic<bool> save_{false};
 
+        size_t  get_chunk_by_coord(size_t y);
+
         void    init_chunk_borders();
         void    init_dirs();
 
         bool    tick();
         void    cycle(std::ostream& os, size_t& tick_n);
         void    print_state(std::ostream& os, size_t tick_n);
-
 
         // thread personal methods
         void    apply_gravity(size_t chunk = 0);
@@ -121,7 +126,7 @@ namespace fluid
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
     Simulation<P, V, VF, SizeArgs...>::Simulation(size_t n, size_t m)
-    : N(n), M(m), n_threads(1), field_(n, m), p_(n, m), old_p_(n, m), last_use_(n, m), dirs_(n, m), velocity_(n, m), velocity_flow_(n, m)
+    : pool_(), N(n), M(m), n_threads(1), field_(n, m), p_(n, m), old_p_(n, m), last_use_(n, m), dirs_(n, m), velocity_(n, m), velocity_flow_(n, m)
     {
         assert(SizesMatch<SizeArgs...>(n, m));
         g_ = 0.1;
@@ -134,7 +139,7 @@ namespace fluid
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
     Simulation<P, V, VF, SizeArgs...>::Simulation(size_t n, size_t m, size_t n_threads)
-    : N(n), M(m), n_threads(n_threads), field_(n, m), p_(n, m), old_p_(n, m), last_use_(n, m), dirs_(n, m), velocity_(n, m), velocity_flow_(n, m)
+    : pool_(n_threads), N(n), M(m), n_threads(n_threads), field_(n, m), p_(n, m), old_p_(n, m), last_use_(n, m), dirs_(n, m), velocity_(n, m), velocity_flow_(n, m)
     {
         assert(SizesMatch<SizeArgs...>(n, m));
         assert(n_threads < M);
@@ -157,6 +162,14 @@ namespace fluid
         chunk_borders[n_threads] = M;
     }
 
+
+    template <typename P, typename V, typename VF, size_t... SizeArgs>
+    size_t Simulation<P, V, VF, SizeArgs...>::get_chunk_by_coord(size_t y)
+    {
+        size_t chunk_size = (M + n_threads) / n_threads;
+        return y / chunk_size;
+    }
+
     template <typename P, typename V, typename VF, size_t... SizeArgs>
     void Simulation<P, V, VF, SizeArgs...>::init_dirs()
     {
@@ -177,7 +190,6 @@ namespace fluid
     {
         field_[i][j] = c;
     }
-
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
     void Simulation<P, V, VF, SizeArgs...>::apply_gravity(size_t chunk)
