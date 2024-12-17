@@ -1,13 +1,13 @@
 #ifndef HEADER_GUARD_THREAD_POOL_HPP
 #define HEADER_GUARD_THREAD_POOL_HPP
 
-#include <atomic>
-#include <condition_variable>
-#include <cstddef>
 /*
     origin : https://habr.com/ru/articles/656515/
 */
 
+#include <atomic>
+#include <condition_variable>
+#include <cstddef>
 #include <functional>
 #include <mutex>
 #include <queue>

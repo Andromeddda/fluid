@@ -102,6 +102,7 @@ namespace fluid
 
         // split field in vertical lines of number = n_thread
         void    init_chunk_borders();
+        bool    own_chunk(size_t chunk, size_t y);
 
         void    init_dirs();
         void    tick(bool& prop);
@@ -119,9 +120,12 @@ namespace fluid
         // DFS field updating methods (physics)
         V       move_prob(int x, int y);
         void    propagate_move(int x, int y, bool is_first, bool& ret);
-        void    propagate_stop(int x, int y, bool force = false);
+        void    propagate_stop(int x, int y, bool force);
         void    propagate_flow(int x, int y, V lim, std::pair<V, std::optional<std::pair<int, int>>>& ret);
 
+        void    propagate_move_bounded(size_t chunk, int x, int y, bool is_first, bool& ret);
+        void    propagate_stop_bounded(size_t chunk, int x, int y, bool force);
+        void    propagate_flow_bounded(size_t chunk, int x, int y, V lim, std::pair<V, std::optional<std::pair<int, int>>>& ret);
 
         void    save(const std::string& save_to);
     }; // class Simulation
@@ -180,6 +184,14 @@ namespace fluid
         for (auto i = 0LU; i < n_threads; i++)
             chunk_borders[i] = i*chunk_size;
         chunk_borders[n_threads] = M;
+    }
+
+    template <typename P, typename V, typename VF, size_t... SizeArgs>
+    bool Simulation<P, V, VF, SizeArgs...>::own_chunk(size_t chunk, size_t y)
+    {
+        if (chunk == CHUNK_ANY)
+            return true;
+        return (y >= chunk_borders[chunk]) && (y < chunk_borders[chunk + 1]);
     }
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
@@ -311,6 +323,8 @@ namespace fluid
                 std::pair<V, std::optional<std::pair<int, int>>> task_res;
 
                 propagate_flow(x, y, 1, task_res);
+                // propagate_flow_bounded(chunk, x, y, 1, task_res);
+
                 auto t = task_res.first;
                 if (t > 0)
                     prop = true;
@@ -392,11 +406,14 @@ namespace fluid
                     {
                         prop = true;
                         bool dummy;
+
                         propagate_move(x, y, true, dummy);
+                        // propagate_move_bounded(chunk, x, y, true, dummy);
                     } 
                     else 
                     {
                         propagate_stop(x, y, true);
+                        // propagate_stop_bounded(chunk, x, y, true);
                     }
                 }
             }
@@ -636,7 +653,7 @@ namespace fluid
             nx = x + dx;
             ny = y + dy;
 
-            assert(velocity_.get(x, y, dx, dy) > 0);
+            // assert(velocity_.get(x, y, dx, dy) > 0);
             assert(field_[nx][ny] != '#');
             // assert(last_use_[nx][ny] < UT);
 
@@ -671,7 +688,7 @@ namespace fluid
             if (velocity_.get(x, y, dx, dy) >= 0)
                 continue;
 
-            propagate_stop(nx, ny);
+            propagate_stop(nx, ny, false);
         }
 
         if (ret)
@@ -774,6 +791,33 @@ namespace fluid
         }
         return sum;
     } // Simulation::move_prob
+
+    template <typename P, typename V, typename VF, size_t... SizeArgs>
+    void 
+    Simulation<P, V, VF, SizeArgs...>::propagate_move_bounded(
+        size_t chunk, int x, int y, bool is_first, bool& ret)
+    {
+        if (own_chunk(chunk, y))
+            propagate_move(x, y, is_first, ret);
+    }
+
+    template <typename P, typename V, typename VF, size_t... SizeArgs>
+    void 
+    Simulation<P, V, VF, SizeArgs...>::propagate_stop_bounded(
+        size_t chunk, int x, int y, bool force)
+    {
+        if (own_chunk(chunk, y))
+            propagate_stop(x, y, force);
+    }
+
+    template <typename P, typename V, typename VF, size_t... SizeArgs>
+    void 
+    Simulation<P, V, VF, SizeArgs...>::propagate_flow_bounded(
+        size_t chunk, int x, int y, V lim, std::pair<V, std::optional<std::pair<int, int>>>& ret)
+    {
+        if (own_chunk(chunk, y))
+            propagate_flow(x, y, lim, ret);
+    }
 
 } // namespace fluid
 
