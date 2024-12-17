@@ -429,8 +429,11 @@ namespace fluid
     template <typename P, typename V, typename VF, size_t... SizeArgs>
     void Simulation<P, V, VF, SizeArgs...>::tick(bool& prop)
     {
+        // std::cout << '0';
         schedule_tasks(&Simulation<P, V, VF, SizeArgs...>::apply_gravity);
+        // std::cout << '1';
         schedule_tasks(&Simulation<P, V, VF, SizeArgs...>::apply_forces_from_p);
+        // std::cout << '2';
 
         velocity_flow_.v.reset();
         bool make_flow = false;
@@ -441,10 +444,14 @@ namespace fluid
             schedule_tasks(&Simulation<P, V, VF, SizeArgs...>::try_make_flow, std::ref(make_flow));
         } while (make_flow);
 
+        // std::cout << '3';
+
 
         schedule_tasks(&Simulation<P, V, VF, SizeArgs...>::recalculate_p);
+        // std::cout << '4';
         UT += 2;
         schedule_tasks(&Simulation<P, V, VF, SizeArgs...>::process_particles, std::ref(prop));
+        // std::cout << "5\n";
     }
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
@@ -488,7 +495,6 @@ namespace fluid
     template <typename P, typename V, typename VF, size_t... SizeArgs>
     void Simulation<P, V, VF, SizeArgs...>::run(std::ostream& os, const std::string& save_to)
     {
-        os << "running with " << n_threads << " threads\n";
         init_dirs();
 
         size_t tick = 0;
