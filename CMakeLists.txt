@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDART 20)
 set(CMAKE_CXX_STANDARD_REQUIRED on)
 
 set(CMAKE_CXX_FLAGS_DEBUG "-std=gnu++20 -fsanitize=undefined,address,float-divide-by-zero,float-cast-overflow -g3 -O0")
-set(CMAKE_CXX_FLAGS_RELEASE "-Werror -Wall -Wextra -std=gnu++20 -g3 -O2")
+set(CMAKE_CXX_FLAGS_RELEASE "-Werror -Wall -Wextra -std=gnu++20 -g0 -O2")
 
 set(SOURCES
     src/main.cpp

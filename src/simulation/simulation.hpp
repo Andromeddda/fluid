@@ -98,24 +98,29 @@ namespace fluid
 
         bool    own_chunk(size_t chunk, size_t y);
 
+        template <typename Func, typename ...Args>
+        void    schedule_tasks(const Func& func, Args&&... args);
+
         void    init_chunk_borders();
         void    init_dirs();
 
-        void    tick(size_t chunk, bool& prop);
+        void    tick(bool& prop);
         void    cycle(std::ostream& os, size_t& tick_n);
         void    print_state(std::ostream& os, size_t tick_n);
 
-        // thread personal methods
-        void    apply_gravity(size_t chunk);
-        void    apply_forces_from_p(size_t chunk);
-        void    make_flow_from_velocities(size_t chunk);
-        void    recalculate_p(size_t chunk);
-        void    process_particles(size_t chunk, bool& prop);
+        // Methods to process particles near chunk in a specific thread
+        void    apply_gravity               (size_t chunk);
+        void    apply_forces_from_p         (size_t chunk);
+        void    try_make_flow               (size_t chunk, bool& prop);
+        void    make_flow_from_velocities   (size_t chunk);
+        void    recalculate_p               (size_t chunk);
+        void    process_particles           (size_t chunk, bool& prop);
 
+        // DFS field updating methods
         V       move_prob(int x, int y);
-        void    propagate_move(size_t chunk, int x, int y, bool is_first, bool& ret);
-        void    propagate_stop(size_t chunk, int x, int y, bool force = false);
-        void    propagate_flow(size_t chunk, int x, int y, V lim, std::pair<V, std::optional<std::pair<int, int>>>& ret);
+        void    propagate_move(int x, int y, bool is_first, bool& ret);
+        void    propagate_stop(int x, int y, bool force = false);
+        void    propagate_flow(int x, int y, V lim, std::pair<V, std::optional<std::pair<int, int>>>& ret);
 
 
         void    save(const std::string& save_to);
@@ -161,6 +166,12 @@ namespace fluid
     }
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
+    void Simulation<P, V, VF, SizeArgs...>::set_field(size_t i, size_t j, char c) 
+    {
+        field_[i][j] = c;
+    }
+
+    template <typename P, typename V, typename VF, size_t... SizeArgs>
     void Simulation<P, V, VF, SizeArgs...>::init_chunk_borders()
     {
         chunk_borders = std::vector<size_t>(n_threads + 1);
@@ -179,6 +190,13 @@ namespace fluid
     }
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
+    void Simulation<P, V, VF, SizeArgs...>::release(std::mutex& mtx)
+    {
+        if (n_threads > 1)
+            mtx.unlock();
+    }
+
+    template <typename P, typename V, typename VF, size_t... SizeArgs>
     bool Simulation<P, V, VF, SizeArgs...>::own_chunk(size_t chunk, size_t y)
     {
         if (chunk == CHUNK_ANY)
@@ -188,11 +206,26 @@ namespace fluid
     }
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
-    void Simulation<P, V, VF, SizeArgs...>::release(std::mutex& mtx)
+    template <typename Func, typename ...Args>
+    void    Simulation<P, V, VF, SizeArgs...>::schedule_tasks(const Func& func, Args&&... args)
     {
-        if (n_threads > 1)
-            mtx.lock();
+        if (n_threads < 2)
+        {
+            // only one chunk, nothing to schedule
+
+            (this->*func)(0, args...);
+            // func(this, 0, std::forward<Args>(args)...);
+            return;
+        }
+
+        for (auto chunk = 0LU; chunk < n_threads; chunk++)
+        {
+            pool_.add_task(func, this, chunk, args...);
+        }
+        pool_.wait_all();
     }
+
+    // Physics
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
     void Simulation<P, V, VF, SizeArgs...>::init_dirs()
@@ -207,12 +240,6 @@ namespace fluid
                     dirs_[x][y] += (field_[x + dx][y + dy] != '#');
             }
         }
-    }
-
-    template <typename P, typename V, typename VF, size_t... SizeArgs>
-    void Simulation<P, V, VF, SizeArgs...>::set_field(size_t i, size_t j, char c) 
-    {
-        field_[i][j] = c;
     }
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
@@ -239,7 +266,7 @@ namespace fluid
             for (size_t y = chunk_borders[chunk]; y < chunk_borders[chunk + 1]; ++y) 
             {
                 if (field_[x][y] == '#')
-                    continue;
+                    continue; // skip walls
 
                 for (auto [dx, dy] : deltas) 
                 {
@@ -280,6 +307,30 @@ namespace fluid
     }
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
+    void Simulation<P, V, VF, SizeArgs...>::try_make_flow(size_t chunk, bool& prop)
+    {
+        for (size_t x = 0; x < N; ++x)
+        {
+            for (size_t y = chunk_borders[chunk]; y < chunk_borders[chunk + 1]; ++y) 
+            {
+                if (field_[x][y] == '#')
+                    continue; // skip walls
+
+                if (last_use_[x][y] == UT)
+                    continue; // skip particles that are already processed
+
+                std::pair<V, std::optional<std::pair<int, int>>> task_res;
+
+                propagate_flow(x, y, 1, task_res);
+                auto t = task_res.first;
+                if (t > 0)
+                    prop = true;
+            }
+        }
+    }
+
+
+    template <typename P, typename V, typename VF, size_t... SizeArgs>
     void Simulation<P, V, VF, SizeArgs...>::make_flow_from_velocities(size_t chunk)
     {
         velocity_flow_.v.reset();
@@ -288,27 +339,13 @@ namespace fluid
         {
             UT += 2;
             prop = false;
-            for (size_t x = 0; x < N; ++x)
-            {
-                for (size_t y = chunk_borders[chunk]; y < chunk_borders[chunk + 1]; ++y) 
-                {
-                    if (field_[x][y] == '#')
-                        continue; // skip walls
-
-                    if (last_use_[x][y] == UT)
-                        continue; // skip particles that are already processed
-
-                    std::pair<V, std::optional<std::pair<int, int>>> task_res;
-
-                    propagate_flow(chunk, x, y, 1, task_res);
-                    auto t = task_res.first;
-                    if (t > 0)
-                        prop = true;
-                }
-            }
+            try_make_flow(chunk, prop);
         } while (prop);
     }
 
+
+    // READ:    field_, velocity_, velocity_flow_, rho_. dirs
+    // WRITE:   p_
     template <typename P, typename V, typename VF, size_t... SizeArgs>
     void Simulation<P, V, VF, SizeArgs...>::recalculate_p(size_t chunk)
     {
@@ -329,8 +366,9 @@ namespace fluid
 
                     if (new_v > old_v) 
                     {
-                        std::cout << "SIMULATION ERROR: " << new_v << " > " << old_v << '\n';
+                        // std::cout << "SIMULATION ERROR: " << new_v << " > " << old_v << '\n';
                         assert(new_v <= old_v);
+                        // return;
                     }
 
                     velocity_.get(x, y, dx, dy) = new_v;
@@ -365,11 +403,11 @@ namespace fluid
                     {
                         prop = true;
                         bool dummy;
-                        propagate_move(chunk, x, y, true, dummy);
+                        propagate_move(x, y, true, dummy);
                     } 
                     else 
                     {
-                        propagate_stop(chunk, x, y, true);
+                        propagate_stop(x, y, true);
                     }
                 }
             }
@@ -389,51 +427,38 @@ namespace fluid
     }
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
-    void Simulation<P, V, VF, SizeArgs...>::tick(size_t chunk, bool& prop)
+    void Simulation<P, V, VF, SizeArgs...>::tick(bool& prop)
     {
-        apply_gravity(chunk);
-        apply_forces_from_p(chunk);
-        make_flow_from_velocities(chunk);
-        recalculate_p(chunk);
+        schedule_tasks(&Simulation<P, V, VF, SizeArgs...>::apply_gravity);
+        schedule_tasks(&Simulation<P, V, VF, SizeArgs...>::apply_forces_from_p);
 
-        if (ut_next.exchange(false))
+        velocity_flow_.v.reset();
+        bool make_flow = false;
+        do
+        {
             UT += 2;
-        
-        process_particles(chunk, prop);
+            make_flow = false;
+            schedule_tasks(&Simulation<P, V, VF, SizeArgs...>::try_make_flow, std::ref(make_flow));
+        } while (make_flow);
+
+
+        schedule_tasks(&Simulation<P, V, VF, SizeArgs...>::recalculate_p);
+        UT += 2;
+        schedule_tasks(&Simulation<P, V, VF, SizeArgs...>::process_particles, std::ref(prop));
     }
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
     void Simulation<P, V, VF, SizeArgs...>::cycle(std::ostream& os, size_t& tick_n)
     {
-        if (n_threads < 2)
-        {
-            for (; tick_n < T; ++tick_n)
-            {
-                ut_next.store(true);
-                bool prop = false;
-                tick(0, prop);
-                if(prop)
-                    print_state(os, tick_n);
-
-                if (save_.load())
-                    return;
-            }
-            return;
-        }
-
-        pool_.init(n_threads);
+        if (n_threads > 1)
+            pool_.init(n_threads);
 
         for (; tick_n < T; ++tick_n)
         {
-            bool prop;
-            ut_next.store(true);
-            for (auto i = 0LU; i < n_threads; ++i)
-            {
-                pool_.add_task(&Simulation<P, V, VF, SizeArgs...>::tick, this, i, std::ref(prop));
-            }
-            pool_.wait_all();
+            bool prop = false;
+            tick(prop);
 
-            if (prop)
+            if(prop)
                 print_state(os, tick_n);
         }
     }
@@ -474,8 +499,10 @@ namespace fluid
     } // Simulation::run
 
 
+    // READ:    velocity_, velocity_flow_, field_
+    // WRITE:   last_use_, velocity_flow_
     template <typename P, typename V, typename VF, size_t... SizeArgs>
-    void Simulation<P, V, VF, SizeArgs...>::propagate_flow(size_t chunk, int x, int y, V lim, std::pair<V, std::optional<std::pair<int, int>>>& ret) 
+    void Simulation<P, V, VF, SizeArgs...>::propagate_flow(int x, int y, V lim, std::pair<V, std::optional<std::pair<int, int>>>& ret) 
     {
         guard(lu_mtx);
         if (last_use_[x][y] >= UT - 1)
@@ -523,15 +550,7 @@ namespace fluid
 
             std::pair<V, std::optional<std::pair<int, int>>> task_res;
 
-            propagate_flow(chunk, nx, ny, vp, task_res);
-
-            // if (own_chunk(chunk, ny))
-            //     propagate_flow(chunk, nx, ny, vp, task_res);
-            // else
-            // {
-            //     size_t task = pool_.add_task(&Simulation<P, V, VF, SizeArgs...>::propagate_flow, this, CHUNK_ANY, nx, ny, vp, std::ref(task_res));
-            //     pool_.wait(task);
-            // }
+            propagate_flow(nx, ny, vp, task_res);
 
             auto t = task_res.first;
             auto end = task_res.second;
@@ -569,8 +588,11 @@ namespace fluid
         return;
     } // Simulation:propagate_flow
 
+
+    // READ:  velocity_, field_, 
+    // WRITE: last_use_, field_, p_, velocity_
     template <typename P, typename V, typename VF, size_t... SizeArgs>
-    void Simulation<P, V, VF, SizeArgs...>::propagate_move(size_t chunk, int x, int y, bool is_first, bool& ret) 
+    void Simulation<P, V, VF, SizeArgs...>::propagate_move(int x, int y, bool is_first, bool& ret) 
     {
         guard(lu_mtx);
 
@@ -622,24 +644,17 @@ namespace fluid
 
             assert(velocity_.get(x, y, dx, dy) > 0);
             assert(field_[nx][ny] != '#');
-            assert(last_use_[nx][ny] < UT);
+            // assert(last_use_[nx][ny] < UT);
 
             bool task_res;
 
-            if (last_use_[nx][ny] == UT - 1)
+            if (last_use_[nx][ny] >= UT - 1)
             {
                 ret = true;
                 break;
             }
 
-            propagate_move(chunk, nx, ny, false, task_res);
-            // if (own_chunk(chunk, ny))
-            //     propagate_move(chunk, nx, ny, false, task_res);
-            // else
-            // {
-            //     size_t task = pool_.add_task(&Simulation<P, V, VF, SizeArgs...>::propagate_move, this, CHUNK_ANY, nx, ny, false, std::ref(task_res));
-            //     pool_.wait(task);
-            // }
+            propagate_move(nx, ny, false, task_res);
             ret = ret || task_res;
             
         } while (!ret);
@@ -662,14 +677,7 @@ namespace fluid
             if (velocity_.get(x, y, dx, dy) >= 0)
                 continue;
 
-            propagate_stop(chunk, nx, ny);
-            // if (own_chunk(chunk, ny))
-            //     propagate_stop(chunk, nx, ny);
-            // else
-            // {
-            //     size_t task = pool_.add_task(&Simulation<P, V, VF, SizeArgs...>::propagate_stop, this, CHUNK_ANY, nx, ny, false);
-            //     pool_.wait(task);
-            // }
+            propagate_stop(nx, ny);
         }
 
         if (ret)
@@ -691,8 +699,10 @@ namespace fluid
     } //  Simulation::propagate_move
 
 
+    // READ:    velocity_
+    // WRITE:   last_use_ 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
-    void Simulation<P, V, VF, SizeArgs...>::propagate_stop(size_t chunk, int x, int y, bool force) 
+    void Simulation<P, V, VF, SizeArgs...>::propagate_stop(int x, int y, bool force) 
     {
         guard(lu_mtx);
         if (last_use_[x][y] >= UT - 1)
@@ -747,17 +757,14 @@ namespace fluid
             if (velocity_.get(x, y, dx, dy) > 0)
                 continue; // skip particles that are in our way
 
-            propagate_stop(chunk, nx, ny, false);
-            // if (own_chunk(chunk, ny))
-            //     propagate_stop(chunk, nx, ny, false); // stop the particle
-            // else 
-            // {
-            //     size_t task = pool_.add_task(&Simulation<P, V, VF, SizeArgs...>::propagate_stop, this, CHUNK_ANY, nx, ny, false);
-            //     pool_.wait(task);
-            // }
+            propagate_stop(nx, ny, false);
         }   
     } // Simulation::propagate_stop
 
+
+
+    // READ:    velocity_
+    // WRITE:   
     template <typename P, typename V, typename VF, size_t... SizeArgs>
     V Simulation<P, V, VF, SizeArgs...>::move_prob(int x, int y) 
     {
