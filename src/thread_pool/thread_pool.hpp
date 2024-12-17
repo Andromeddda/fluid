@@ -72,10 +72,9 @@ namespace fluid
     {
         std::lock_guard<std::mutex> tasks_queue_lock(task_queue_mutex);
         size_t id = next_id++;
-        task_queue.push(Task {
-            .id = id,
-            .func = std::async(std::launch::deferred, f, args...)
-        });
+
+        task_queue.push(Task{id, std::async(std::launch::deferred, f, args...)});
+
         task_queue_condvar.notify_one();
         return id;
     }

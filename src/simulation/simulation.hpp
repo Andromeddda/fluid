@@ -96,14 +96,14 @@ namespace fluid
         void    guard(std::mutex& mtx);
         void    release(std::mutex& mtx);
 
-        bool    own_chunk(size_t chunk, size_t y);
-
+        // main thread utils
         template <typename Func, typename ...Args>
         void    schedule_tasks(const Func& func, Args&&... args);
 
+        // split field in vertical lines of number = n_thread
         void    init_chunk_borders();
-        void    init_dirs();
 
+        void    init_dirs();
         void    tick(bool& prop);
         void    cycle(std::ostream& os, size_t& tick_n);
         void    print_state(std::ostream& os, size_t tick_n);
@@ -116,7 +116,7 @@ namespace fluid
         void    recalculate_p               (size_t chunk);
         void    process_particles           (size_t chunk, bool& prop);
 
-        // DFS field updating methods
+        // DFS field updating methods (physics)
         V       move_prob(int x, int y);
         void    propagate_move(int x, int y, bool is_first, bool& ret);
         void    propagate_stop(int x, int y, bool force = false);
@@ -197,24 +197,13 @@ namespace fluid
     }
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
-    bool Simulation<P, V, VF, SizeArgs...>::own_chunk(size_t chunk, size_t y)
-    {
-        if (chunk == CHUNK_ANY)
-            return true;
-
-        return (y >= chunk_borders[chunk]) && (y < chunk_borders[chunk + 1]);
-    }
-
-    template <typename P, typename V, typename VF, size_t... SizeArgs>
     template <typename Func, typename ...Args>
     void    Simulation<P, V, VF, SizeArgs...>::schedule_tasks(const Func& func, Args&&... args)
     {
         if (n_threads < 2)
         {
-            // only one chunk, nothing to schedule
-
+            // only one chunk and one thread, nothing to schedule
             (this->*func)(0, args...);
-            // func(this, 0, std::forward<Args>(args)...);
             return;
         }
 
@@ -222,7 +211,7 @@ namespace fluid
         {
             pool_.add_task(func, this, chunk, args...);
         }
-        pool_.wait_all();
+        // pool_.wait_all();
     }
 
     // Physics
@@ -429,11 +418,10 @@ namespace fluid
     template <typename P, typename V, typename VF, size_t... SizeArgs>
     void Simulation<P, V, VF, SizeArgs...>::tick(bool& prop)
     {
-        // std::cout << '0';
         schedule_tasks(&Simulation<P, V, VF, SizeArgs...>::apply_gravity);
-        // std::cout << '1';
         schedule_tasks(&Simulation<P, V, VF, SizeArgs...>::apply_forces_from_p);
-        // std::cout << '2';
+
+        pool_.wait_all();
 
         velocity_flow_.v.reset();
         bool make_flow = false;
@@ -444,14 +432,14 @@ namespace fluid
             schedule_tasks(&Simulation<P, V, VF, SizeArgs...>::try_make_flow, std::ref(make_flow));
         } while (make_flow);
 
-        // std::cout << '3';
-
-
         schedule_tasks(&Simulation<P, V, VF, SizeArgs...>::recalculate_p);
-        // std::cout << '4';
+
+        pool_.wait_all();
+
         UT += 2;
         schedule_tasks(&Simulation<P, V, VF, SizeArgs...>::process_particles, std::ref(prop));
-        // std::cout << "5\n";
+
+        pool_.wait_all();
     }
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
@@ -689,8 +677,6 @@ namespace fluid
         if (ret)
             if (!is_first) 
             {
-                guard(v_mtx);
-                guard(field_mtx);
                 guard(p_mtx);
 
                 ParticleParams<P, V> pp{};
@@ -698,8 +684,6 @@ namespace fluid
                 pp.swap_with(*this, nx, ny);
                 pp.swap_with(*this, x, y);
 
-                release(v_mtx);
-                release(field_mtx);
                 release(p_mtx);
             }
     } //  Simulation::propagate_move
@@ -766,8 +750,6 @@ namespace fluid
             propagate_stop(nx, ny, false);
         }   
     } // Simulation::propagate_stop
-
-
 
     // READ:    velocity_
     // WRITE:   

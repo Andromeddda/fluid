@@ -33,7 +33,8 @@ namespace fluid
 
     void ThreadPool::wait(size_t id) 
     {
-        std::unique_lock<std::mutex> done_task_ids_lock(completed_tasks_mutex);
+        std::unique_lock<std::mutex> completed_tasks_lock(completed_tasks_mutex);
+
         if (completed_tasks.contains(id))
             return;
 
@@ -41,13 +42,12 @@ namespace fluid
             return completed_tasks.contains(id);
         };
 
-
-        completed_tasks_condvar.wait(done_task_ids_lock, wait_condition);
+        completed_tasks_condvar.wait(completed_tasks_lock, wait_condition);
     }
 
     void ThreadPool::wait_all() 
     {
-        std::unique_lock<std::mutex> done_task_ids_lock(completed_tasks_mutex);
+        std::unique_lock<std::mutex> completed_tasks_lock(completed_tasks_mutex);
 
         {
             std::lock_guard<std::mutex> tasks_queue_lock(task_queue_mutex);
@@ -60,7 +60,7 @@ namespace fluid
             return completed_tasks.size() == next_id;
         };
 
-        completed_tasks_condvar.wait(done_task_ids_lock, wait_condition);
+        completed_tasks_condvar.wait(completed_tasks_lock, wait_condition);
     }
 
     void ThreadPool::run() 
@@ -84,7 +84,7 @@ namespace fluid
 
             task.func.get();
 
-            std::lock_guard<std::mutex> done_task_ids_lock(completed_tasks_mutex);
+            std::lock_guard<std::mutex> completed_tasks_lock(completed_tasks_mutex);
             completed_tasks.insert(task.id);
 
             ++free_threads;
