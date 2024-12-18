@@ -103,6 +103,8 @@ namespace fluid
         // split field in vertical lines of number = n_thread
         void    init_chunk_borders();
         bool    own_chunk(size_t chunk, size_t y);
+        size_t  left_border(size_t chunk);
+        size_t  right_border(size_t chunk);
 
         void    init_dirs();
         void    tick_chunk_strategy(bool& prop);
@@ -191,9 +193,24 @@ namespace fluid
     template <typename P, typename V, typename VF, size_t... SizeArgs>
     bool Simulation<P, V, VF, SizeArgs...>::own_chunk(size_t chunk, size_t y)
     {
+        return (y >= left_border(chunk)) && (y < right_border(chunk));
+    }
+
+
+    template <typename P, typename V, typename VF, size_t... SizeArgs>
+    size_t Simulation<P, V, VF, SizeArgs...>::left_border(size_t chunk)
+    {
         if (chunk == CHUNK_ANY)
-            return true;
-        return (y >= chunk_borders[chunk]) && (y < chunk_borders[chunk + 1]);
+            return 0LU;
+        return chunk_borders[chunk];
+    }
+
+    template <typename P, typename V, typename VF, size_t... SizeArgs>
+    size_t Simulation<P, V, VF, SizeArgs...>::right_border(size_t chunk)
+    {
+        if (chunk == CHUNK_ANY)
+            return M;
+        return chunk_borders[chunk + 1];
     }
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
@@ -212,7 +229,7 @@ namespace fluid
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
     template <typename Func, typename ...Args>
-    void    Simulation<P, V, VF, SizeArgs...>::schedule_tasks(const Func& func, Args&&... args)
+    void Simulation<P, V, VF, SizeArgs...>::schedule_tasks(const Func& func, Args&&... args)
     {
         if (n_threads < 2)
         {
@@ -250,7 +267,7 @@ namespace fluid
     {
         for (size_t x = 0; x < N; ++x) 
         {
-            for (size_t y = chunk_borders[chunk]; y < chunk_borders[chunk + 1]; ++y) 
+            for (size_t y = left_border(chunk); y < right_border(chunk); ++y) 
             {
                 if (field_[x][y] == '#')
                     continue;
@@ -266,7 +283,7 @@ namespace fluid
         old_p_ = p_;
         for (size_t x = 0; x < N; ++x) 
         {
-            for (size_t y = chunk_borders[chunk]; y < chunk_borders[chunk + 1]; ++y) 
+            for (size_t y = left_border(chunk); y < right_border(chunk); ++y) 
             {
                 if (field_[x][y] == '#')
                     continue; // skip walls
@@ -314,7 +331,7 @@ namespace fluid
     {
         for (size_t x = 0; x < N; ++x)
         {
-            for (size_t y = chunk_borders[chunk]; y < chunk_borders[chunk + 1]; ++y) 
+            for (size_t y = left_border(chunk); y < right_border(chunk); ++y) 
             {
                 if (field_[x][y] == '#')
                     continue; // skip walls
@@ -357,7 +374,7 @@ namespace fluid
         // Recalculate p_ with kinetic energy
         for (size_t x = 0; x < N; ++x) 
         {
-            for (size_t y = chunk_borders[chunk]; y < chunk_borders[chunk + 1]; ++y) 
+            for (size_t y = left_border(chunk); y < right_border(chunk); ++y) 
             {
                 if (field_[x][y] == '#')
                     continue;
@@ -400,7 +417,7 @@ namespace fluid
     {
         for (size_t x = 0; x < N; ++x) 
         {
-            for (size_t y = chunk_borders[chunk]; y < chunk_borders[chunk + 1]; ++y) 
+            for (size_t y = left_border(chunk); y < right_border(chunk); ++y) 
             {
                 if (field_[x][y] != '#' && last_use_[x][y] != UT) 
                 {
