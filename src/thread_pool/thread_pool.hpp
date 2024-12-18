@@ -10,7 +10,7 @@
 #include <cstddef>
 #include <functional>
 #include <mutex>
-#include <queue>
+#include <deque>
 #include <thread>
 #include <unordered_set>
 #include <vector>
@@ -38,8 +38,11 @@ namespace fluid
 
         void shutdown();
 
-        template<typename F, typename... Args>
-        size_t add_task(const F& f, Args&&... args);
+        template<typename Func, typename... Args>
+        size_t add_task(const Func& f, Args&&... args);
+
+        template<typename Func, typename... Args>
+        size_t force_task(const Func& f, Args&&... args);
 
         void wait(size_t id);
 
@@ -54,7 +57,7 @@ namespace fluid
         std::vector<std::thread> threads;
 
 
-        std::queue<Task>            task_queue;
+        std::deque<Task>            task_queue;
         std::mutex                  task_queue_mutex;
         std::condition_variable     task_queue_condvar;
 
@@ -67,15 +70,37 @@ namespace fluid
 
     };
 
-    template<typename F, typename... Args>
-    size_t ThreadPool::add_task(const F& f, Args&&... args) 
+    template<typename Func, typename... Args>
+    size_t ThreadPool::add_task(const Func& f, Args&&... args) 
     {
         std::lock_guard<std::mutex> tasks_queue_lock(task_queue_mutex);
         size_t id = next_id++;
 
-        task_queue.push(Task{id, std::async(std::launch::deferred, f, args...)});
+        task_queue.push_back(Task{id, std::async(std::launch::deferred, f, args...)});
 
         task_queue_condvar.notify_one();
+        return id;
+    }
+
+    template<typename Func, typename... Args>
+    size_t ThreadPool::force_task(const Func& f, Args&&... args) 
+    {
+        std::lock_guard<std::mutex> tasks_queue_lock(task_queue_mutex);
+        size_t id = next_id++;
+
+        if (free_threads > 0) 
+        {
+            task_queue.push_front(Task{id, std::async(std::launch::deferred, f, args...)});
+            task_queue_condvar.notify_one();
+            return id;
+        }
+
+        f(args...);
+
+        std::lock_guard<std::mutex> completed_tasks_lock(completed_tasks_mutex);
+        completed_tasks.insert(id);
+        completed_tasks_condvar.notify_one();
+
         return id;
     }
 

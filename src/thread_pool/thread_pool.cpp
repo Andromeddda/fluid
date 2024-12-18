@@ -79,7 +79,7 @@ namespace fluid
             if (shut) break;
 
             auto task = std::move(task_queue.front());
-            task_queue.pop();
+            task_queue.pop_front();
             tasks_queue_lock.unlock();
 
             task.func.get();

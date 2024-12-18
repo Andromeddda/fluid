@@ -105,7 +105,9 @@ namespace fluid
         bool    own_chunk(size_t chunk, size_t y);
 
         void    init_dirs();
-        void    tick(bool& prop);
+        void    tick_chunk_strategy(bool& prop);
+        void    tick_recursive_strategy(bool& prop);
+
         void    cycle(std::ostream& os, size_t& tick_n);
         void    print_state(std::ostream& os, size_t tick_n);
 
@@ -118,10 +120,10 @@ namespace fluid
         void    process_particles           (size_t chunk, bool& prop);
 
         // DFS field updating methods (physics)
-        V       move_prob(int x, int y);
-        void    propagate_move(int x, int y, bool is_first, bool& ret);
-        void    propagate_stop(int x, int y, bool force);
-        void    propagate_flow(int x, int y, V lim, std::pair<V, std::optional<std::pair<int, int>>>& ret);
+        V       move_prob       (int x, int y);
+        void    propagate_move  (int x, int y, bool is_first, bool& ret);
+        void    propagate_stop  (int x, int y, bool force);
+        void    propagate_flow  (int x, int y, V lim, std::pair<V, std::optional<std::pair<int, int>>>& ret);
 
         void    propagate_move_bounded(size_t chunk, int x, int y, bool is_first, bool& ret);
         void    propagate_stop_bounded(size_t chunk, int x, int y, bool force);
@@ -433,7 +435,7 @@ namespace fluid
     }
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
-    void Simulation<P, V, VF, SizeArgs...>::tick(bool& prop)
+    void Simulation<P, V, VF, SizeArgs...>::tick_chunk_strategy(bool& prop)
     {
         schedule_tasks(&Simulation<P, V, VF, SizeArgs...>::apply_gravity);
         schedule_tasks(&Simulation<P, V, VF, SizeArgs...>::apply_forces_from_p);
@@ -468,7 +470,7 @@ namespace fluid
         for (; tick_n < T; ++tick_n)
         {
             bool prop = false;
-            tick(prop);
+            tick_chunk_strategy(prop);
 
             if(prop)
                 print_state(os, tick_n);
@@ -502,9 +504,9 @@ namespace fluid
     {
         init_dirs();
 
-        size_t tick = 0;
+        size_t tick_chunk_strategy = 0;
 
-        cycle(os, tick);
+        cycle(os, tick_chunk_strategy);
 
         (void)save_to;
     } // Simulation::run
@@ -695,12 +697,16 @@ namespace fluid
             if (!is_first) 
             {
                 guard(p_mtx);
+                guard(field_mtx);
+                guard(vf_mtx);
 
                 ParticleParams<P, V> pp{};
                 pp.swap_with(*this, x, y);
                 pp.swap_with(*this, nx, ny);
                 pp.swap_with(*this, x, y);
 
+                release(vf_mtx);
+                release(field_mtx);
                 release(p_mtx);
             }
     } //  Simulation::propagate_move
@@ -711,13 +717,13 @@ namespace fluid
     template <typename P, typename V, typename VF, size_t... SizeArgs>
     void Simulation<P, V, VF, SizeArgs...>::propagate_stop(int x, int y, bool force) 
     {
-        guard(lu_mtx);
-        if (last_use_[x][y] >= UT - 1)
-        {
-            release(lu_mtx);
-            return;
-        }
-        release(lu_mtx);
+        // guard(lu_mtx);
+        // if (last_use_[x][y] >= UT - 1)
+        // {
+        //     release(lu_mtx);
+        //     return;
+        // }
+        // release(lu_mtx);
 
         if (!force) 
         {
