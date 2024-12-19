@@ -28,7 +28,7 @@
 
 namespace fluid
 {
-    constexpr size_t T = 1'000'000;
+    constexpr size_t T = 5'000;
 
     class AbstractSimulation
     {
@@ -455,6 +455,7 @@ namespace fluid
     void Simulation<P, V, VF, SizeArgs...>::tick_chunk_strategy(bool& prop)
     {
         schedule_tasks(&Simulation<P, V, VF, SizeArgs...>::apply_gravity);
+        pool_.wait_all();
         schedule_tasks(&Simulation<P, V, VF, SizeArgs...>::apply_forces_from_p);
 
         pool_.wait_all();
@@ -466,6 +467,7 @@ namespace fluid
             UT += 2;
             make_flow = false;
             schedule_tasks(&Simulation<P, V, VF, SizeArgs...>::try_make_flow, std::ref(make_flow));
+            pool_.wait_all();
         } while (make_flow);
 
         schedule_tasks(&Simulation<P, V, VF, SizeArgs...>::recalculate_p);
@@ -563,6 +565,9 @@ namespace fluid
                 continue;
 
             VF vp = std::min(lim, cap - flow);
+            if (vp < 0.005)
+                continue;
+
             if (last_use_[nx][ny] == UT - 1) 
             {
                 guard(vf_mtx);
