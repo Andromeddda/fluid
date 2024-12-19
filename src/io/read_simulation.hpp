@@ -27,7 +27,7 @@ namespace fluid
         Reader(const std::string& filename);
         Reader(const char *filename);
 
-        SimulationPtr get_simulation(TypeDescriptor p, TypeDescriptor v, TypeDescriptor vf);
+        SimulationPtr get_simulation(TypeDescriptor p, TypeDescriptor v, TypeDescriptor vf, size_t n_threads);
     private:
         std::string filename_;
     };
@@ -42,7 +42,7 @@ namespace fluid
         {}
 
 
-    SimulationPtr Reader::get_simulation(TypeDescriptor p, TypeDescriptor v, TypeDescriptor vf)
+    SimulationPtr Reader::get_simulation(TypeDescriptor p, TypeDescriptor v, TypeDescriptor vf, size_t n_threads)
     {
         SimulationPtr result;
 
@@ -56,7 +56,7 @@ namespace fluid
         // construct simulation
         SimulationDescriptor sd{p, v, vf, N, M};
         auto producer = get_producer(sd);
-        result = producer(N, M);
+        result = producer(N, M, n_threads);
 
         // read ASCII art of field
         std::string line;

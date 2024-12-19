@@ -35,9 +35,15 @@ namespace fluid
     template <typename Type, size_t... SizeArgs>
     Type& VectorField<Type, SizeArgs...>::get(int x, int y, int dx, int dy) 
     {
-        size_t i = std::ranges::find(deltas, std::pair(dx, dy)) - deltas.begin();
-        assert(i < deltas.size());
-        return v[x][y][i];
+        switch  (2 + dx + 2*dy)
+        {
+        case  0: return v[x][y][2];
+        case  1: return v[x][y][0];
+        case  2: assert(false);
+        case  3: return v[x][y][1];
+        case  4: return v[x][y][3];
+        default: assert(false);
+        }
     }
 
 } // namespace fluid

@@ -67,7 +67,7 @@ namespace fluid
     //
 
     typedef typename std::shared_ptr<AbstractSimulation>                         SimulationPtr;
-    typedef typename std::function<SimulationPtr(size_t, size_t)>                SimulationProducer;
+    typedef typename std::function<SimulationPtr(size_t, size_t, size_t)>        SimulationProducer;
     typedef typename std::array<SimulationProducer, template_combination_number> ProducerArray;
 
     ProducerArray producers;
@@ -82,9 +82,9 @@ namespace fluid
             producers[index - 1] = SimulationProducer(producer);        
         }
 
-        static SimulationPtr producer(size_t n, size_t m)
+        static SimulationPtr producer(size_t n, size_t m, size_t thrds)
         {
-            return SimulationPtr(new GetSimulationType<descriptors[index - 1]>::type(n, m));
+            return SimulationPtr(new GetSimulationType<descriptors[index - 1]>::type(n, m, thrds));
         }
     };
 
