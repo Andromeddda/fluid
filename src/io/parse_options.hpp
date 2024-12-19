@@ -41,7 +41,7 @@ namespace fluid
     Options parse_options(int argc, char* argv[])
     {
         Options result;
-        result.n_threads = 1;
+        result.n_threads = 0;
 
         if (argc < 6)
         {

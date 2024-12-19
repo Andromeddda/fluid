@@ -21,6 +21,7 @@
 #include "type_processing.hpp"
 #include "matrix.hpp"
 #include "random.hpp"
+#include "thread_pool.hpp"
 
 namespace fluid
 {
@@ -49,7 +50,7 @@ namespace fluid
     {
     public:
         Simulation();
-        Simulation(size_t n, size_t m);
+        Simulation(size_t n, size_t m, size_t n_threads = 0);
 
         Simulation& operator= (const Simulation& other) = default;
 
@@ -59,10 +60,9 @@ namespace fluid
     private:
         friend class ParticleParams<P, V>;
 
-        size_t N, M;
-
-        size_t n_threads;
         ThreadPool pool_;
+        size_t N, M;
+        size_t n_threads;
 
         MatrixType<char, SizeArgs...>::type field_;
 
@@ -87,11 +87,17 @@ namespace fluid
         void    tick(std::ostream& os, size_t tick_n);
         void    cycle(std::ostream& os, size_t& tick_n);
 
-        void    apply_gravity();
-        void    apply_forces_from_p();
-        void    make_flow_from_velocities();
-        void    recalculate_p();
+        void    apply_gravity_all();
+        void    apply_forces_all();
+        void    make_flow_all();
+        void    recalculate_p_all();
         bool    process_particles();
+
+        void    apply_gravity(size_t x, size_t y);
+        void    apply_force(size_t x, size_t y);
+        void    make_flow(size_t x, size_t y, bool& prop);
+        void    recalculate_p(size_t x, size_t y);
+        void    process_particle(size_t x, size_t y, bool& prop);
 
         void    print_state(std::ostream& os, size_t tick_n);
 
@@ -115,7 +121,7 @@ namespace fluid
     template <typename P, typename V, typename VF, size_t... SizeArgs>
     Simulation<P, V, VF, SizeArgs...>::Simulation()
     : 
-        N(GetSizes<SizeArgs...>::n), M(GetSizes<SizeArgs...>::m),
+        pool_(), N(GetSizes<SizeArgs...>::n), M(GetSizes<SizeArgs...>::m), n_threads(1),
         field_(N, M), p_(N, M), old_p_(N, M), last_use_(N, M), dirs_(N, M), velocity_(N, M), velocity_flow_(N, M)
     {
         g_ = 0.1;
@@ -124,25 +130,27 @@ namespace fluid
     }
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
-    Simulation<P, V, VF, SizeArgs...>::Simulation(size_t n, size_t m)
-    : N(n), M(m), field_(n, m), p_(n, m), old_p_(n, m), last_use_(n, m), dirs_(n, m), velocity_(n, m), velocity_flow_(n, m)
+    Simulation<P, V, VF, SizeArgs...>::Simulation(size_t n, size_t m, size_t n_threads)
+    : pool_(), N(n), M(m), n_threads(n_threads), field_(n, m), p_(n, m), old_p_(n, m), last_use_(n, m), dirs_(n, m), velocity_(n, m), velocity_flow_(n, m)
     {
         assert(SizesMatch<SizeArgs...>(n, m));
+        assert(n_threads < M);
+
         g_ = 0.1;
         rho_[' '] = 0.01;
-        rho_['.'] = 1000; 
+        rho_['.'] = 1000;
     }
 
     //=========================================//
     //                Running                  //
     //=========================================//
 
-
+    template <typename P, typename V, typename VF, size_t... SizeArgs>
     template<typename Func, typename... Args>
-    size_t schedule_task(const Func& f, Args&&... args)
+    size_t Simulation<P, V, VF, SizeArgs...>::schedule_task(const Func& f, Args&&... args)
     {
-        if (n_threads > 0) {
-            f(this, args...);
+        if (n_threads < 2) {
+            (this->*f)(args...);
             return 0;
         }
         return pool_.add_task(f, this, args...);
@@ -163,10 +171,10 @@ namespace fluid
     template <typename P, typename V, typename VF, size_t... SizeArgs>
     void Simulation<P, V, VF, SizeArgs...>::tick(std::ostream& os, size_t tick_n)
     {
-        apply_gravity();
-        apply_forces_from_p();
-        make_flow_from_velocities();
-        recalculate_p();
+        apply_gravity_all();
+        apply_forces_all();
+        make_flow_all();
+        recalculate_p_all();
 
         UT += 2;
         
@@ -252,63 +260,132 @@ namespace fluid
         field_[i][j] = c;
     }
 
+    template <typename P, typename V, typename VF, size_t... SizeArgs>
+    void Simulation<P, V, VF, SizeArgs...>::apply_gravity(size_t x, size_t y)
+    {
+        if (field_[x][y] == '#')
+            return;
+        if (field_[x + 1][y] != '#')
+            velocity_.add(x, y, 1, 0, g_);
+    }
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
-    void Simulation<P, V, VF, SizeArgs...>::apply_gravity()
+    void Simulation<P, V, VF, SizeArgs...>::apply_force(size_t x, size_t y)
     {
-        for (size_t x = 0; x < N; ++x) 
+        if (field_[x][y] == '#')
+            return;
+
+        for (auto [dx, dy] : deltas) 
         {
-            for (size_t y = 0; y < M; ++y) 
+            int nx = x + dx, ny = y + dy;
+
+            if (field_[nx][ny] == '#' )
+                return; // skip walls
+
+            if (old_p_[nx][ny] >= old_p_[x][y])
+                return;
+
+            auto force = old_p_[x][y] - old_p_[nx][ny];
+            auto &contr = velocity_.get(nx, ny, -dx, -dy);
+
+            if (contr * rho_[(int) field_[nx][ny]] >= force) 
             {
-                if (field_[x][y] == '#')
-                    continue;
-                if (field_[x + 1][y] != '#')
-                    velocity_.add(x, y, 1, 0, g_);
+                contr -= force / rho_[(int) field_[nx][ny]];
+                return;
             }
+
+            force -= contr * rho_[(int) field_[nx][ny]];
+            contr = 0;
+            velocity_.add(x, y, dx, dy, force / rho_[(int) field_[x][y]]);
+            p_[x][y] -= force / dirs_[x][y];
         }
     }
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
-    void Simulation<P, V, VF, SizeArgs...>::apply_forces_from_p()
+    void Simulation<P, V, VF, SizeArgs...>::make_flow(size_t x, size_t y, bool& prop)
+    {
+        if (field_[x][y] == '#')
+            return; // skip walls
+
+        if (last_use_[x][y] == UT)
+            return; // skip particles that are already processed
+
+        auto [t, coord] = propagate_flow(x, y, 1);
+        if (t > 0)
+            prop = true;
+    }
+
+    template <typename P, typename V, typename VF, size_t... SizeArgs>
+    void Simulation<P, V, VF, SizeArgs...>::recalculate_p(size_t x, size_t y)
+    {
+        if (field_[x][y] == '#')
+            return;
+        for (auto [dx, dy] : deltas) 
+        {
+            V old_v = velocity_.get(x, y, dx, dy);
+            V new_v = velocity_flow_.get(x, y, dx, dy);
+
+            if (old_v <= 0)
+                return;
+
+            if (new_v > old_v) 
+                assert(new_v <= old_v);
+
+            velocity_.get(x, y, dx, dy) = new_v;
+            V force = (old_v - new_v) * rho_[(int) field_[x][y]];
+
+            if (field_[x][y] == '.')
+                force *= 0.8;
+
+            if (field_[x + dx][y + dy] == '#') 
+                p_[x][y] += force / dirs_[x][y];
+            else 
+                p_[x + dx][y + dy] += force / dirs_[x + dx][y + dy];
+        }
+    }
+
+    template <typename P, typename V, typename VF, size_t... SizeArgs>
+    void Simulation<P, V, VF, SizeArgs...>::process_particle(size_t x, size_t y, bool& prop)
+    {
+        if (field_[x][y] == '#')
+            return;
+
+        if (last_use_[x][y] == UT)
+            return;
+
+        if (random01<V>() < move_prob(x, y)) 
+        {
+            prop = true;
+            propagate_move(x, y, true);
+        } 
+        else 
+        {
+            propagate_stop(x, y, true);
+        }
+    }
+
+
+    template <typename P, typename V, typename VF, size_t... SizeArgs>
+    void Simulation<P, V, VF, SizeArgs...>::apply_gravity_all()
+    {
+        for (size_t x = 0; x < N; ++x) 
+            for (size_t y = 0; y < M; ++y) 
+                schedule_task(&Simulation<P, V, VF, SizeArgs...>::apply_gravity, x, y);
+        pool_.wait_all();
+    }
+
+    template <typename P, typename V, typename VF, size_t... SizeArgs>
+    void Simulation<P, V, VF, SizeArgs...>::apply_forces_all()
     {
         old_p_ = p_;
         for (size_t x = 0; x < N; ++x) 
-        {
             for (size_t y = 0; y < M; ++y) 
-            {
-                if (field_[x][y] == '#')
-                    continue;
-
-                for (auto [dx, dy] : deltas) 
-                {
-                    int nx = x + dx, ny = y + dy;
-
-                    if (field_[nx][ny] == '#' )
-                        continue; // skip walls
-
-                    if (old_p_[nx][ny] >= old_p_[x][y])
-                        continue;
-
-                    auto force = old_p_[x][y] - old_p_[nx][ny];
-                    auto &contr = velocity_.get(nx, ny, -dx, -dy);
-
-                    if (contr * rho_[(int) field_[nx][ny]] >= force) 
-                    {
-                        contr -= force / rho_[(int) field_[nx][ny]];
-                        continue;
-                    }
-
-                    force -= contr * rho_[(int) field_[nx][ny]];
-                    contr = 0;
-                    velocity_.add(x, y, dx, dy, force / rho_[(int) field_[x][y]]);
-                    p_[x][y] -= force / dirs_[x][y];
-                }
-            }
-        }
+                schedule_task(&Simulation<P, V, VF, SizeArgs...>::apply_force, x, y);
+        pool_.wait_all();
     }
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
-    void Simulation<P, V, VF, SizeArgs...>::make_flow_from_velocities()
+    void Simulation<P, V, VF, SizeArgs...>::make_flow_all()
     {
         velocity_flow_.v.reset();
         bool prop = false;
@@ -317,99 +394,30 @@ namespace fluid
             UT += 2;
             prop = false;
             for (size_t x = 0; x < N; ++x)
-            {
                 for (size_t y = 0; y < M; ++y) 
-                {
-                    if (field_[x][y] == '#')
-                        continue; // skip walls
-
-                    if (last_use_[x][y] == UT)
-                        continue; // skip particles that are already processed
-
-                    auto [t, coord] = propagate_flow(x, y, 1);
-                    if (t > 0)
-                        prop = true;
-                }
-            }
+                    schedule_task(&Simulation<P, V, VF, SizeArgs...>::make_flow, x, y, std::ref(prop));
+            pool_.wait_all();
         } while (prop);
     }
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
-    void Simulation<P, V, VF, SizeArgs...>::make_flow(size_t x, size_t y, bool& prop)
-    {
-        if (field_[x][y] == '#')
-            continue; // skip walls
-
-        if (last_use_[x][y] == UT)
-            continue; // skip particles that are already processed
-
-        auto [t, coord] = propagate_flow(x, y, 1);
-        if (t > 0)
-            prop = true;
-    }
-
-
-    template <typename P, typename V, typename VF, size_t... SizeArgs>
-    void Simulation<P, V, VF, SizeArgs...>::recalculate_p()
+    void Simulation<P, V, VF, SizeArgs...>::recalculate_p_all()
     {
         // Recalculate p_ with kinetic energy
-        for (size_t x = 0; x < N; ++x) 
-        {
+        for (size_t x = 0; x < N; ++x)
             for (size_t y = 0; y < M; ++y) 
-            {
-                if (field_[x][y] == '#')
-                    continue;
-                for (auto [dx, dy] : deltas) 
-                {
-                    V old_v = velocity_.get(x, y, dx, dy);
-                    V new_v = velocity_flow_.get(x, y, dx, dy);
-
-                    if (old_v <= 0)
-                        continue;
-
-                    if (new_v > old_v) 
-                    {
-                        std::cout << "SIMULATION ERROR: " << new_v << " > " << old_v << '\n';
-                        assert(new_v <= old_v);
-                    }
-
-                    velocity_.get(x, y, dx, dy) = new_v;
-                    V force = (old_v - new_v) * rho_[(int) field_[x][y]];
-
-                    if (field_[x][y] == '.')
-                        force *= 0.8;
-
-                    if (field_[x + dx][y + dy] == '#') 
-                        p_[x][y] += force / dirs_[x][y];
-                    else 
-                        p_[x + dx][y + dy] += force / dirs_[x + dx][y + dy];
-                }
-            }
-        }
+                schedule_task(&Simulation<P, V, VF, SizeArgs...>::recalculate_p, x, y);
+        pool_.wait_all();
     }
 
     template <typename P, typename V, typename VF, size_t... SizeArgs>
     bool Simulation<P, V, VF, SizeArgs...>::process_particles()
     {
         bool prop = false;
-        for (size_t x = 0; x < N; ++x) 
-        {
+        for (size_t x = 0; x < N; ++x)
             for (size_t y = 0; y < M; ++y) 
-            {
-                if (field_[x][y] != '#' && last_use_[x][y] != UT) 
-                {
-                    if (random01<V>() < move_prob(x, y)) 
-                    {
-                        prop = true;
-                        propagate_move(x, y, true);
-                    } 
-                    else 
-                    {
-                        propagate_stop(x, y, true);
-                    }
-                }
-            }
-        }
+                schedule_task(&Simulation<P, V, VF, SizeArgs...>::process_particle, x, y, std::ref(prop));
+        pool_.wait_all();
         return prop;
     }
 
