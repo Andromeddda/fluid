@@ -2,6 +2,10 @@
 
 2nd and 3rd homework for HSE SE C++ course, 3nd year.
 
+## Report
+
+In file ./REPORT.md
+
 ## Requirements
 
 * C++20 compiler
