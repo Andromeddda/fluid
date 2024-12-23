@@ -8,7 +8,8 @@ In file ./REPORT.md
 
 ## Requirements
 
-* C++20 compiler
+* OS Linux
+* GNU C++20 compiler (g++) version at least 13.0.0
 * CMake version at least 3.23
 
 ## Cloning into repository
