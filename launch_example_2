@@ -4,4 +4,4 @@ cmake -DCMAKE_BUILD_TYPE="RELEASE" -B "./build" -S "." -DTYPES="FAST_FIXED(16,8)
 
 cmake --build build --target fluid -j 4
 
-./build/fluid '--p-type=FAST_FIXED(16,8)' '--v-type=FAST_FIXED(16,8)' '--vf-type=FAST_FIXED(16,8)' './data/2.in' '--save-to=data/2_save.in'
+./build/fluid '--p-type=FAST_FIXED(16,8)' '--v-type=FAST_FIXED(16,8)' '--vf-type=FAST_FIXED(16,8)' './data/2.in' '--save-to=data/saves/2_save.in' '-j1'
