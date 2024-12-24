@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+cmake -DCMAKE_BUILD_TYPE="RELEASE" -B "./build" -S "." -DTYPES="FAST_FIXED(16,8),FIXED(32,16)" -DSIZES="S(36,84)"
+
+cmake --build build --target fluid -j 4
+
+./build/fluid '--p-type=FIXED(32,16)' '--v-type=FIXED(32,16)' '--vf-type=FIXED(32,16)' './data/1.in' '--save-to=data/1_save.in'
